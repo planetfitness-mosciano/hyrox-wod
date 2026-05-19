@@ -2,96 +2,152 @@
 <html lang="it">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=1920">
 <title>HYROX WOD — Planet Fitness Mosciano</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800;900&family=Barlow:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
-:root{
-  --bg:#000;--bg2:#0d0d0d;--bg3:#1a1a1a;
-  --white:#fff;--yellow:#FFE500;
-  --yellow2:rgba(255,229,0,.16);--yellow3:rgba(255,229,0,.35);
-  --dim:rgba(255,255,255,.78);--line:rgba(255,255,255,.10);--linehi:rgba(255,255,255,.18);
+:root {
+  --bg:      #000000;
+  --bg2:     #0d0d0d;
+  --bg3:     #1a1a1a;
+  --white:   #ffffff;
+  --yellow:  #FFE500;
+  --yellow2: rgba(255,229,0,0.16);
+  --yellow3: rgba(255,229,0,0.35);
+  --dim:     rgba(255,255,255,0.78);
+  --line:    rgba(255,255,255,0.10);
+  --linehi:  rgba(255,255,255,0.18);
 }
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html,body{width:1920px;height:1080px;overflow:hidden;background:var(--bg);color:#fff;font-family:'Barlow',sans-serif}
-.screen{width:1920px;height:1080px;display:grid;grid-template-columns:520px 1fr;overflow:hidden;position:relative}
-.left{background:var(--bg2);border-right:2px solid var(--linehi);display:flex;flex-direction:column;padding:0 0 44px;position:relative;overflow:hidden;flex-shrink:0}
-.left-top-bar{width:100%;height:6px;background:var(--yellow);flex-shrink:0}
-.logo-block{background:#000;border-bottom:1px solid var(--linehi);padding:26px 36px 22px;display:flex;flex-direction:column;gap:0;flex-shrink:0}
-.hyrox-wrap{width:100%;margin-bottom:14px}
-.hyrox-img{width:100%;height:auto;display:block}
-.logo-divider{width:100%;height:1px;background:rgba(255,255,255,.18);margin-bottom:14px}
-.pf-wrap{width:100%}
-.pf-img{width:100%;height:auto;display:block;filter:brightness(0) invert(1)}
-.left-body{flex:1;display:flex;flex-direction:column;padding:30px 40px 0;overflow:hidden}
-.eyebrow{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;letter-spacing:.45em;color:var(--yellow);text-transform:uppercase;margin-bottom:12px;display:flex;align-items:center;gap:12px}
-.eyebrow::after{content:"";flex:1;height:1px;background:rgba(255,229,0,.30)}
-.wod-title{font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:68px;line-height:.88;letter-spacing:-.01em;text-transform:uppercase;color:#fff;margin-bottom:18px}
-.wod-desc{font-size:18px;line-height:1.65;color:var(--dim);margin-bottom:24px;flex:1}
-.meta-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:24px}
-.meta-item{background:var(--bg3);border:1px solid var(--linehi);border-radius:5px;padding:13px 16px}
-.meta-item.hl{border-color:rgba(255,229,0,.45);background:rgba(255,229,0,.05)}
-.meta-lbl{font-family:'Barlow Condensed',sans-serif;font-size:15px;letter-spacing:.38em;color:var(--yellow);margin-bottom:6px;text-transform:uppercase}
-.meta-val{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:28px;color:#fff}
-.date-row{font-family:'Barlow Condensed',sans-serif;font-size:21px;letter-spacing:.18em;color:rgba(255,255,255,.88);text-transform:uppercase;padding-top:18px;border-top:1px solid var(--linehi);display:flex;align-items:center;gap:10px}
-.date-row::before{content:"";display:inline-block;width:18px;height:3px;background:var(--yellow);border-radius:2px}
-.right{display:flex;flex-direction:column;overflow:hidden;position:relative}
-.right-top-bar{width:100%;height:6px;background:var(--yellow);flex-shrink:0}
-.right::before,.right::after{content:"";position:absolute;left:0;right:0;height:52px;pointer-events:none;z-index:10}
-.right::before{top:88px;background:linear-gradient(to bottom,#000 0%,transparent 100%)}
-.right::after{bottom:0;background:linear-gradient(to top,#000 0%,transparent 100%)}
-.right-header{display:flex;align-items:center;justify-content:space-between;padding:26px 54px 22px;border-bottom:1px solid var(--linehi);flex-shrink:0;background:var(--bg);position:relative;z-index:5}
-.right-title{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:22px;letter-spacing:.38em;color:rgba(255,255,255,.50);text-transform:uppercase}
-.right-loc{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:22px;letter-spacing:.20em;color:#000;background:var(--yellow);border-radius:4px;padding:7px 22px;text-transform:uppercase}
-.scroll-viewport{flex:1;overflow:hidden;position:relative}
-.scroll-content{padding:24px 54px 40px;display:flex;flex-direction:column;gap:14px;will-change:transform}
-.section{border:1px solid var(--linehi);border-radius:6px;overflow:hidden;background:rgba(255,255,255,.025);flex-shrink:0}
-.section-hd{display:flex;align-items:center;gap:18px;padding:18px 26px;background:rgba(255,255,255,.05);border-bottom:1px solid var(--linehi)}
-.section-badge{font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:17px;letter-spacing:.28em;color:#000;background:var(--yellow);border-radius:3px;padding:6px 16px;text-transform:uppercase;flex-shrink:0}
-.section-name{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:30px;letter-spacing:.10em;color:#fff;text-transform:uppercase}
-.section-schema{margin-left:auto;font-family:'Barlow Condensed',sans-serif;font-size:20px;letter-spacing:.06em;color:var(--yellow);flex-shrink:0;font-weight:600}
-.group{border-bottom:1px solid rgba(255,255,255,.06)}.group:last-child{border-bottom:none}
-.zone-label{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:17px;letter-spacing:.28em;color:#000;background:var(--yellow);display:inline-block;padding:5px 16px;margin:12px 22px 6px;border-radius:3px;text-transform:uppercase}
-.ex-list{padding:2px 0}
-.ex-row{display:flex;align-items:center;gap:16px;padding:16px 26px;border-bottom:1px solid rgba(255,255,255,.05)}
-.ex-row:last-child{border-bottom:none}
-.ex-idx{font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:700;color:rgba(255,255,255,.28);min-width:28px;text-align:right;flex-shrink:0}
-.ex-dot{width:6px;height:6px;border-radius:50%;background:var(--yellow);opacity:.65;flex-shrink:0}
-.ex-name{font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:32px;letter-spacing:.02em;text-transform:uppercase;color:#fff;flex:1}
-.ex-note{font-family:'Barlow Condensed',sans-serif;font-size:18px;letter-spacing:.08em;color:rgba(255,255,255,.55);flex-shrink:0;font-style:italic}
-.ex-rpe{font-family:'Barlow Condensed',sans-serif;font-size:18px;letter-spacing:.12em;color:rgba(255,229,0,.75);flex-shrink:0}
-.ex-metric{font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:34px;color:var(--yellow);letter-spacing:.05em;min-width:110px;text-align:right;flex-shrink:0}
-.ex-metric.amrap{font-size:24px;letter-spacing:.15em}
-/* Loading / Error */
-.overlay{position:fixed;inset:0;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999;gap:24px}
-.overlay.hidden{display:none}
-.spinner{width:56px;height:56px;border:4px solid rgba(255,229,0,.2);border-top-color:#FFE500;border-radius:50%;animation:spin 1s linear infinite}
-@keyframes spin{to{transform:rotate(360deg)}}
-.overlay-title{font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:28px;letter-spacing:.2em;color:#FFE500;text-transform:uppercase}
-.overlay-sub{font-family:'Barlow Condensed',sans-serif;font-size:16px;letter-spacing:.15em;color:rgba(255,255,255,.5);text-transform:uppercase}
-@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
-@keyframes fadeIn{from{opacity:0}to{opacity:1}}
-.left-top-bar,.right-top-bar{animation:fadeIn .3s ease both}
-.logo-block{animation:fadeUp .6s cubic-bezier(.16,1,.3,1) both .08s}
-.left-body>*{animation:fadeUp .65s cubic-bezier(.16,1,.3,1) both}
-.left-body>*:nth-child(1){animation-delay:.18s}.left-body>*:nth-child(2){animation-delay:.26s}
-.left-body>*:nth-child(3){animation-delay:.34s}.left-body>*:nth-child(4){animation-delay:.42s}
-.left-body>*:nth-child(5){animation-delay:.50s}
-.right-header{animation:fadeIn .5s ease both .28s}
-.section{animation:fadeUp .65s cubic-bezier(.16,1,.3,1) both}
-.section:nth-child(1){animation-delay:.44s}.section:nth-child(2){animation-delay:.58s}.section:nth-child(3){animation-delay:.72s}
+*,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+body { background:#000; width:100vw; height:100vh; overflow:hidden; font-family:'Barlow',sans-serif; position:relative; }
+
+.scaler { width:1920px; height:1080px; transform-origin:top left; position:absolute; top:0; left:0; }
+.screen { width:1920px; height:1080px; background:var(--bg); display:grid; grid-template-columns:520px 1fr; overflow:hidden; }
+
+/* ══ SINISTRA ══ */
+.left { background:var(--bg2); border-right:2px solid var(--linehi); display:flex; flex-direction:column; padding:0 0 44px 0; position:relative; overflow:hidden; flex-shrink:0; }
+.left-top-bar { width:100%; height:6px; background:var(--yellow); flex-shrink:0; }
+
+.logo-block { background:#000; border-bottom:1px solid var(--linehi); padding:26px 36px 22px; display:flex; flex-direction:column; gap:0; flex-shrink:0; }
+.hyrox-wrap { width:100%; margin-bottom:14px; }
+.hyrox-img { width:100%; height:auto; display:block; }
+.logo-divider { width:100%; height:1px; background:rgba(255,255,255,0.18); margin-bottom:14px; }
+.pf-wrap { width:100%; }
+.pf-img { width:100%; height:auto; display:block; filter:brightness(0) invert(1); }
+
+.left-body { flex:1; display:flex; flex-direction:column; padding:30px 40px 0; overflow:hidden; }
+
+.eyebrow { font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:18px; letter-spacing:0.45em; color:var(--yellow); text-transform:uppercase; margin-bottom:12px; display:flex; align-items:center; gap:12px; }
+.eyebrow::after { content:""; flex:1; height:1px; background:rgba(255,229,0,0.30); }
+
+.wod-title { font-family:'Barlow Condensed',sans-serif; font-weight:900; font-size:68px; line-height:0.88; letter-spacing:-0.01em; text-transform:uppercase; color:#fff; margin-bottom:18px; }
+
+.wod-desc { font-size:18px; line-height:1.65; color:var(--dim); margin-bottom:24px; flex:1; }
+
+.meta-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:24px; }
+.meta-item { background:var(--bg3); border:1px solid var(--linehi); border-radius:5px; padding:13px 16px; }
+.meta-item.hl { border-color:rgba(255,229,0,0.45); background:rgba(255,229,0,0.05); }
+.meta-lbl { font-family:'Barlow Condensed',sans-serif; font-size:15px; letter-spacing:0.38em; color:var(--yellow); margin-bottom:6px; text-transform:uppercase; }
+.meta-val { font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:28px; color:#fff; }
+
+.date-row { font-family:'Barlow Condensed',sans-serif; font-size:21px; letter-spacing:0.18em; color:rgba(255,255,255,0.88); text-transform:uppercase; padding-top:18px; border-top:1px solid var(--linehi); display:flex; align-items:center; gap:10px; }
+.date-row::before { content:""; display:inline-block; width:18px; height:3px; background:var(--yellow); border-radius:2px; }
+
+/* ══ DESTRA ══ */
+.right { display:flex; flex-direction:column; overflow:hidden; position:relative; }
+.right-top-bar { width:100%; height:6px; background:var(--yellow); flex-shrink:0; }
+
+.right::before,.right::after { content:""; position:absolute; left:0; right:0; height:52px; pointer-events:none; z-index:10; }
+.right::before { top:88px; background:linear-gradient(to bottom,#000 0%,transparent 100%); }
+.right::after  { bottom:0; background:linear-gradient(to top,#000 0%,transparent 100%); }
+
+.right-header { display:flex; align-items:center; justify-content:space-between; padding:26px 54px 22px; border-bottom:1px solid var(--linehi); flex-shrink:0; background:var(--bg); position:relative; z-index:5; }
+.right-title { font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:22px; letter-spacing:0.38em; color:rgba(255,255,255,0.50); text-transform:uppercase; }
+.right-loc { font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:22px; letter-spacing:0.20em; color:#000; background:var(--yellow); border-radius:4px; padding:7px 22px; text-transform:uppercase; }
+
+.scroll-viewport { flex:1; overflow:hidden; position:relative; }
+.scroll-content { padding:24px 54px 40px; display:flex; flex-direction:column; gap:14px; will-change:transform; }
+
+/* ── Sezioni ── */
+.section { border:1px solid var(--linehi); border-radius:6px; overflow:hidden; background:rgba(255,255,255,0.025); flex-shrink:0; }
+.section-hd { display:flex; align-items:center; gap:18px; padding:18px 26px; background:rgba(255,255,255,0.05); border-bottom:1px solid var(--linehi); }
+.section-badge { font-family:'Barlow Condensed',sans-serif; font-weight:900; font-size:17px; letter-spacing:0.28em; color:#000; background:var(--yellow); border-radius:3px; padding:6px 16px; text-transform:uppercase; flex-shrink:0; }
+.section-name { font-family:'Barlow Condensed',sans-serif; font-weight:800; font-size:30px; letter-spacing:0.10em; color:#fff; text-transform:uppercase; }
+.section-schema { margin-left:auto; font-family:'Barlow Condensed',sans-serif; font-size:20px; letter-spacing:0.06em; color:var(--yellow); flex-shrink:0; font-weight:600; }
+
+/* Gruppi / Zone */
+.group { border-bottom:1px solid rgba(255,255,255,0.06); }
+.group:last-child { border-bottom:none; }
+
+.zone-label { font-family:'Barlow Condensed',sans-serif; font-weight:800; font-size:17px; letter-spacing:0.28em; color:#000; background:var(--yellow); display:inline-block; padding:5px 16px; margin:12px 22px 6px; border-radius:3px; text-transform:uppercase; }
+
+/* Esercizi */
+.ex-list { padding:2px 0; }
+.ex-row { display:flex; align-items:center; gap:16px; padding:16px 26px; border-bottom:1px solid rgba(255,255,255,0.05); }
+.ex-row:last-child { border-bottom:none; }
+.ex-idx { font-family:'Barlow Condensed',sans-serif; font-size:20px; font-weight:700; color:rgba(255,255,255,0.28); min-width:28px; text-align:right; flex-shrink:0; }
+.ex-dot { width:6px; height:6px; border-radius:50%; background:var(--yellow); opacity:0.65; flex-shrink:0; }
+.ex-name { font-family:'Barlow Condensed',sans-serif; font-weight:600; font-size:32px; letter-spacing:0.02em; text-transform:uppercase; color:#fff; flex:1; }
+.ex-note { font-family:'Barlow Condensed',sans-serif; font-size:18px; letter-spacing:0.08em; color:rgba(255,255,255,0.55); flex-shrink:0; font-style:italic; }
+.ex-metric { font-family:'Barlow Condensed',sans-serif; font-weight:900; font-size:34px; color:var(--yellow); letter-spacing:0.05em; min-width:110px; text-align:right; flex-shrink:0; }
+.ex-metric.amrap { color:var(--yellow); font-size:24px; letter-spacing:0.15em; }
+
+/* ── Animazioni ── */
+@keyframes fadeUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+@keyframes fadeIn { from{opacity:0} to{opacity:1} }
+.left-top-bar,.right-top-bar { animation:fadeIn .3s ease both; }
+.logo-block { animation:fadeUp .6s cubic-bezier(.16,1,.3,1) both .08s; }
+.left-body > * { animation:fadeUp .65s cubic-bezier(.16,1,.3,1) both; }
+.left-body > *:nth-child(1) { animation-delay:.18s; }
+.left-body > *:nth-child(2) { animation-delay:.26s; }
+.left-body > *:nth-child(3) { animation-delay:.34s; }
+.left-body > *:nth-child(4) { animation-delay:.42s; }
+.left-body > *:nth-child(5) { animation-delay:.50s; }
+.right-header { animation:fadeIn .5s ease both .28s; }
+.section { animation:fadeUp .65s cubic-bezier(.16,1,.3,1) both; }
+.section:nth-child(1) { animation-delay:.44s; }
+.section:nth-child(2) { animation-delay:.58s; }
+.section:nth-child(3) { animation-delay:.72s; }
 </style>
 </head>
 <body>
+<script>
+function applyScale(){
+  const s=document.querySelector('.scaler');
+  if(!s)return;
+  const sc=Math.min(window.innerWidth/1920,window.innerHeight/1080);
+  s.style.transform='scale('+sc+')';
+  s.style.left=Math.round((window.innerWidth-1920*sc)/2)+'px';
+  s.style.top=Math.round((window.innerHeight-1080*sc)/2)+'px';
+}
+window.addEventListener('resize',applyScale);
+document.addEventListener('DOMContentLoaded',()=>{applyScale();initScroll();});
 
-<!-- Loading overlay -->
-<div class="overlay" id="overlay">
-  <div class="spinner"></div>
-  <div class="overlay-title">Caricamento WOD</div>
-  <div class="overlay-sub" id="overlay-sub">Connessione all'API Hyrox...</div>
-</div>
+function initScroll(){
+  const vp=document.querySelector('.scroll-viewport');
+  const ct=document.querySelector('.scroll-content');
+  if(!vp||!ct)return;
+  const vpH=vp.clientHeight;
+  const totalH=ct.scrollHeight;
+  if(totalH<=vpH)return;
+  const maxPos=totalH-vpH;
+  const PX=0.5, PAUSE=2800;
+  let pos=0,dir=1,pausing=false;
+  function doPause(cb){pausing=true;setTimeout(()=>{pausing=false;cb();},PAUSE);}
+  function tick(){
+    if(pausing)return;
+    pos+=PX*dir;
+    if(pos>=maxPos){pos=maxPos;ct.style.transform='translateY(-'+pos.toFixed(2)+'px)';doPause(()=>{dir=-1;requestAnimationFrame(tick);});return;}
+    if(pos<=0){pos=0;ct.style.transform='translateY(0px)';doPause(()=>{dir=1;requestAnimationFrame(tick);});return;}
+    ct.style.transform='translateY(-'+pos.toFixed(2)+'px)';
+    requestAnimationFrame(tick);
+  }
+  setTimeout(()=>requestAnimationFrame(tick),1600);
+}
+</script>
 
-<div class="screen" id="screen" style="display:none">
+<div class="scaler"><div class="screen">
+
   <div class="left">
     <div class="left-top-bar"></div>
     <div class="logo-block">
@@ -101,239 +157,152 @@ html,body{width:1920px;height:1080px;overflow:hidden;background:var(--bg);color:
     </div>
     <div class="left-body">
       <div class="eyebrow">Workout of the Day</div>
-      <div class="wod-title" id="wod-title">—</div>
-      <div class="wod-desc" id="wod-desc"></div>
+      <div class="wod-title">Foundational<br>#201</div>
+      <div class="wod-desc">Sessione da 55 min con 40 min di lavoro ad alta intensità (RPE&nbsp;9), 5 min di istruzione e 5 min di stretching. Per un massimo di 24 atleti.</div>
       <div class="meta-grid">
-        <div class="meta-item hl"><div class="meta-lbl">Durata</div><div class="meta-val" id="meta-dur">—</div></div>
-        <div class="meta-item hl"><div class="meta-lbl">Intensità</div><div class="meta-val" id="meta-int">—</div></div>
-        <div class="meta-item"><div class="meta-lbl">Esercizi</div><div class="meta-val" id="meta-ex">—</div></div>
-        <div class="meta-item"><div class="meta-lbl">Sezioni</div><div class="meta-val" id="meta-sec">—</div></div>
+        <div class="meta-item hl"><div class="meta-lbl">Durata</div><div class="meta-val">50 min</div></div>
+        <div class="meta-item hl"><div class="meta-lbl">Intensità</div><div class="meta-val">RPE 9</div></div>
+        <div class="meta-item"><div class="meta-lbl">Esercizi</div><div class="meta-val">13</div></div>
+        <div class="meta-item"><div class="meta-lbl">Sezioni</div><div class="meta-val">3</div></div>
       </div>
-      <div class="date-row" id="date-row">—</div>
+      <div class="date-row">Lunedì 18 Maggio 2026</div>
     </div>
   </div>
+
   <div class="right">
     <div class="right-top-bar"></div>
     <div class="right-header">
       <div class="right-title">Programma Allenamento</div>
       <div class="right-loc">Mosciano Sant'Angelo</div>
     </div>
-    <div class="scroll-viewport" id="scroll-vp">
-      <div class="scroll-content" id="scroll-ct"></div>
+    <div class="scroll-viewport">
+      <div class="scroll-content">
+        
+        <div class="section">
+          <div class="section-hd">
+            <span class="section-badge">01</span>
+            <span class="section-name">Warm Up</span>
+            <span class="section-schema">45s lavoro · 20s riposo · 5 rounds · 5 min</span>
+          </div>
+          <div class="ex-list"><div class="group">
+                <div class="ex-row">
+                  <span class="ex-idx">1</span>
+                  <div class="ex-dot"></div>
+                  <span class="ex-name">RowErg</span>
+                  
+                  <span class="ex-metric">45 s</span>
+                </div>
+                <div class="ex-row">
+                  <span class="ex-idx">2</span>
+                  <div class="ex-dot"></div>
+                  <span class="ex-name">Squat Jack</span>
+                  
+                  <span class="ex-metric">45 s</span>
+                </div>
+                <div class="ex-row">
+                  <span class="ex-idx">3</span>
+                  <div class="ex-dot"></div>
+                  <span class="ex-name">SkiErg</span>
+                  
+                  <span class="ex-metric">45 s</span>
+                </div>
+                <div class="ex-row">
+                  <span class="ex-idx">4</span>
+                  <div class="ex-dot"></div>
+                  <span class="ex-name">Rotational Push-Ups</span>
+                  
+                  <span class="ex-metric">45 s</span>
+                </div>
+                <div class="ex-row">
+                  <span class="ex-idx">5</span>
+                  <div class="ex-dot"></div>
+                  <span class="ex-name">KB Jefferson Curls</span>
+                  
+                  <span class="ex-metric">45 s</span>
+                </div></div></div>
+        </div>
+        <div class="section">
+          <div class="section-hd">
+            <span class="section-badge">02</span>
+            <span class="section-name">Main Workout</span>
+            <span class="section-schema">75s lavoro · 25s riposo · 24 rounds (4 circuit)</span>
+          </div>
+          <div class="ex-list"><div class="group"><div class="zone-label">Zone 1</div>
+                <div class="ex-row">
+                  <span class="ex-idx">1</span>
+                  <div class="ex-dot"></div>
+                  <span class="ex-name">DB OH Tricep Extension</span>
+                  
+                  <span class="ex-metric">8 reps</span>
+                </div>
+                <div class="ex-row">
+                  <span class="ex-idx">2</span>
+                  <div class="ex-dot"></div>
+                  <span class="ex-name">DB 1 Arm Row</span>
+                  <span class="ex-note">Switch arms ogni 4 reps</span>
+                  <span class="ex-metric amrap">AMRAP</span>
+                </div></div><div class="group"><div class="zone-label">Zone 2</div>
+                <div class="ex-row">
+                  <span class="ex-idx">1</span>
+                  <div class="ex-dot"></div>
+                  <span class="ex-name">Run</span>
+                  <span class="ex-note">RPE 7</span>
+                  <span class="ex-metric">45 s</span>
+                </div>
+                <div class="ex-row">
+                  <span class="ex-idx">2</span>
+                  <div class="ex-dot"></div>
+                  <span class="ex-name">Run</span>
+                  <span class="ex-note">RPE 9</span>
+                  <span class="ex-metric">30 s</span>
+                </div></div><div class="group"><div class="zone-label">Zone 3</div>
+                <div class="ex-row">
+                  <span class="ex-idx">1</span>
+                  <div class="ex-dot"></div>
+                  <span class="ex-name">Overhand Sled Push</span>
+                  
+                  <span class="ex-metric amrap">AMRAP</span>
+                </div>
+                <div class="ex-row">
+                  <span class="ex-idx">2</span>
+                  <div class="ex-dot"></div>
+                  <span class="ex-name">Sled Pull</span>
+                  
+                  <span class="ex-metric amrap">AMRAP</span>
+                </div></div><div class="group"><div class="zone-label">Zone 4</div>
+                <div class="ex-row">
+                  <span class="ex-idx">1</span>
+                  <div class="ex-dot"></div>
+                  <span class="ex-name">Burpee Broad Jump</span>
+                  
+                  <span class="ex-metric amrap">AMRAP</span>
+                </div>
+                <div class="ex-row">
+                  <span class="ex-idx">2</span>
+                  <div class="ex-dot"></div>
+                  <span class="ex-name">Sandbag Lunges</span>
+                  
+                  <span class="ex-metric amrap">AMRAP</span>
+                </div></div></div>
+        </div>
+        <div class="section">
+          <div class="section-hd">
+            <span class="section-badge">03</span>
+            <span class="section-name">Cool Down</span>
+            <span class="section-schema">5 min</span>
+          </div>
+          <div class="ex-list"><div class="group">
+                <div class="ex-row">
+                  <span class="ex-idx">1</span>
+                  <div class="ex-dot"></div>
+                  <span class="ex-name">Stretching</span>
+                  
+                  <span class="ex-metric">5 min</span>
+                </div></div></div>
+        </div>
+      </div>
     </div>
   </div>
-</div>
 
-<script>
-const GIST_RAW    = 'https://gist.githubusercontent.com/planetfitness-mosciano/102ceab1a532e31afbbb6ed68b70cc73/raw/token.json';
-const GITHUB_PAT  = ['ghp_4KIYUutClmVB','dFpJxXQhU3fhPOz54z2RFjPI'].join('');
-const GQL         = 'https://api.prod.hyrox.fiit-tech.net/graphql';
-
-// ── HELPERS ──────────────────────────────────────────────────────
-function fmtSec(s){
-  if(!s||s<0)return null;
-  const m=Math.floor(s/60),r=Math.round(s%60);
-  return m?(r?m+'min '+r+'s':m+'min'):r+'s';
-}
-function fmtMetric(ex){
-  const reps=ex.detailedMetrics?.repetitions?.single;
-  const dist=ex.detailedMetrics?.distance?.single;
-  const wt=ex.detailedMetrics?.weight?.single;
-  const dur=ex.duration>0?ex.duration:null;
-  if(reps===-1)return{v:'AMRAP',amrap:true};
-  if(reps>0)return{v:reps+' reps',amrap:false};
-  if(dist>0)return{v:dist+'m',amrap:false};
-  if(dur)return{v:fmtSec(dur),amrap:false};
-  if(wt>0)return{v:wt+'kg',amrap:false};
-  return{v:'—',amrap:false};
-}
-function intensityLabel(v){
-  if(!v)return'PERFORMANCE';
-  if(v<=3)return'BEGINNER';if(v<=5)return'MODERATE';
-  if(v<=7)return'ADVANCED';if(v<=9)return'HARD';return'ELITE';
-}
-function setStatus(msg){document.getElementById('overlay-sub').textContent=msg;}
-
-// ── FETCH TOKEN ───────────────────────────────────────────────────
-async function getToken(){
-  setStatus('Lettura token da GitHub...');
-  const r=await fetch(GIST_RAW+'?t='+Date.now(),{
-    headers:{'Authorization':'Bearer '+GITHUB_PAT,'Cache-Control':'no-cache'}
-  });
-  if(!r.ok)throw new Error('GitHub non raggiungibile: '+r.status);
-  const d=await r.json();
-  if(!d.token||d.token==='PLACEHOLDER')throw new Error('Token non ancora rinnovato. Usa la pagina di rinnovo.');
-  const exp=new Date(d.expiresAt);
-  if(exp<new Date())throw new Error('Token scaduto. Usa la pagina di rinnovo.');
-  return d.token;
-}
-
-// ── FETCH WOD ─────────────────────────────────────────────────────
-async function fetchWOD(token){
-  setStatus('Download WOD del giorno...');
-  const today=new Date();today.setUTCHours(0,0,0,0);
-  const r=await fetch(GQL,{
-    method:'POST',
-    headers:{'Content-Type':'application/json','Authorization':'Bearer '+token,'Origin':'https://performancehub.hyrox365.com'},
-    body:JSON.stringify({
-      operationName:'WODToday',
-      query:`query WODToday($date:ISODateTime!){
-        wotd:allLessonSchedules(filters:{first:1,orderBy:"created_at",direction:asc}condition:{scheduledAt:$date}){
-          id scheduledAt lesson{
-            id name description duration intensity
-            image{url signedUrl}
-            tags{name}
-            sections{
-              id name description format duration rounds workTime restTime displayOrder
-              sectionExerciseGroups{
-                id name repeatTimes format displayOrder
-                sectionExercises{
-                  id displayOrder duration notes rpe
-                  exercise{id name}
-                  detailedMetrics{
-                    weight{min max single}
-                    repetitions{min max single}
-                    distance{min max single}
-                  }
-                }
-              }
-            }
-          }
-        }
-      }`,
-      variables:{date:today.toISOString()}
-    })
-  });
-  const data=await r.json();
-  if(data.errors)throw new Error(data.errors[0].message);
-  const wotd=data.data?.wotd?.[0];
-  if(!wotd)throw new Error('WOD non trovato per oggi');
-  return wotd;
-}
-
-// ── RENDER ────────────────────────────────────────────────────────
-function render(wotd){
-  const l=wotd.lesson;
-  const today=new Date();
-  const dateStr=today.toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long',year:'numeric'}).toUpperCase();
-  const sections=(l.sections||[]).slice().sort((a,b)=>(a.displayOrder||0)-(b.displayOrder||0));
-  const totalEx=sections.reduce((n,s)=>n+(s.sectionExerciseGroups||[]).reduce((m,g)=>m+(g.sectionExercises?.length||0),0),0);
-
-  // Sinistra
-  const titleParts=l.name.match(/^(.*?)(#\d+.*)$/);
-  document.getElementById('wod-title').innerHTML=titleParts?titleParts[1].trim()+'<br>'+titleParts[2]:l.name;
-  document.getElementById('wod-desc').textContent=(l.description||'').replace(/<[^>]+>/g,'').substring(0,200);
-  document.getElementById('meta-dur').textContent=fmtSec(l.duration)||'—';
-  document.getElementById('meta-int').textContent=intensityLabel(l.intensity)+(l.intensity?' · RPE '+l.intensity:'');
-  document.getElementById('meta-ex').textContent=totalEx||'—';
-  document.getElementById('meta-sec').textContent=sections.length||'—';
-  document.getElementById('date-row').textContent=dateStr;
-
-  // Destra — sezioni
-  const ct=document.getElementById('scroll-ct');
-  ct.innerHTML=sections.map((sec,si)=>{
-    const groups=(sec.sectionExerciseGroups||[]).slice().sort((a,b)=>(a.displayOrder||0)-(b.displayOrder||0));
-    let schema='';
-    if(sec.format==='INTERVALS'&&sec.workTime){
-      schema=sec.workTime+'s lavoro · '+sec.restTime+'s riposo';
-      if(sec.rounds)schema+=' · '+sec.rounds+' rounds';
-    }else if(sec.rounds)schema=sec.rounds+' rounds';
-    if(sec.duration>0)schema+=(schema?' · ':'')+fmtSec(sec.duration);
-
-    const groupsHTML=groups.map(g=>{
-      const zl=(g.name&&g.name!=='Group 1')?`<div class="zone-label">${g.name}</div>`:'';
-      const exs=(g.sectionExercises||[]).slice().sort((a,b)=>(a.displayOrder||0)-(b.displayOrder||0)).map((ex,i)=>{
-        const {v,amrap}=fmtMetric(ex);
-        const note=ex.notes?`<span class="ex-note">${ex.notes}</span>`:'';
-        const rpe=ex.rpe?`<span class="ex-rpe">RPE ${ex.rpe}</span>`:'';
-        return `<div class="ex-row">
-          <span class="ex-idx">${i+1}</span>
-          <div class="ex-dot"></div>
-          <span class="ex-name">${ex.exercise?.name||'—'}</span>
-          ${note}${rpe}
-          <span class="ex-metric${amrap?' amrap':''}">${v}</span>
-        </div>`;
-      }).join('');
-      return `<div class="group">${zl}${exs}</div>`;
-    }).join('');
-
-    return `<div class="section">
-      <div class="section-hd">
-        <span class="section-badge">0${si+1}</span>
-        <span class="section-name">${sec.name}</span>
-        ${schema?`<span class="section-schema">${schema}</span>`:''}
-      </div>
-      <div class="ex-list">${groupsHTML}</div>
-    </div>`;
-  }).join('');
-
-  // Mostra
-  document.getElementById('overlay').classList.add('hidden');
-  document.getElementById('screen').style.display='';
-
-  // Scala
-  applyScale();
-
-  // Scroll
-  initScroll();
-}
-
-// ── SCALA ─────────────────────────────────────────────────────────
-function applyScale(){
-  const sc=Math.min(window.innerWidth/1920,window.innerHeight/1080);
-  document.body.style.transform='scale('+sc+')';
-  document.body.style.transformOrigin='top left';
-  document.body.style.width='1920px';
-  document.body.style.height='1080px';
-}
-window.addEventListener('resize',applyScale);
-
-// ── SCROLL ────────────────────────────────────────────────────────
-function initScroll(){
-  const vp=document.getElementById('scroll-vp');
-  const ct=document.getElementById('scroll-ct');
-  const vpH=vp.clientHeight,totalH=ct.scrollHeight;
-  if(totalH<=vpH)return;
-  const maxPos=totalH-vpH,PX=0.5,PAUSE=2800;
-  let pos=0,dir=1,pausing=false;
-  function doPause(cb){pausing=true;setTimeout(()=>{pausing=false;cb();},PAUSE);}
-  function tick(){
-    if(pausing)return;
-    pos+=PX*dir;
-    if(pos>=maxPos){pos=maxPos;ct.style.transform='translateY(-'+pos.toFixed(2)+'px)';doPause(()=>{dir=-1;requestAnimationFrame(tick);});return;}
-    if(pos<=0){pos=0;ct.style.transform='translateY(0)';doPause(()=>{dir=1;requestAnimationFrame(tick);});return;}
-    ct.style.transform='translateY(-'+pos.toFixed(2)+'px)';
-    requestAnimationFrame(tick);
-  }
-  setTimeout(()=>requestAnimationFrame(tick),1600);
-}
-
-// ── RICARICA ogni 6 ore ───────────────────────────────────────────
-function scheduleReload(){
-  // Ricarica alla mezzanotte per prendere il WOD del giorno dopo
-  const now=new Date();
-  const midnight=new Date(now);
-  midnight.setHours(24,5,0,0); // 00:05 del giorno dopo
-  const ms=midnight-now;
-  setTimeout(()=>location.reload(),ms);
-}
-
-// ── MAIN ──────────────────────────────────────────────────────────
-async function main(){
-  try{
-    applyScale();
-    const token=await getToken();
-    const wotd=await fetchWOD(token);
-    render(wotd);
-    scheduleReload();
-  }catch(e){
-    document.getElementById('overlay-sub').textContent='❌ '+e.message;
-    // Riprova dopo 60 secondi
-    setTimeout(main,60000);
-  }
-}
-
-document.addEventListener('DOMContentLoaded',main);
-</script>
-</body>
-</html>
+</div></div>
+</body></html>
