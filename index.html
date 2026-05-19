@@ -50,6 +50,73 @@ body { background:#000; width:100vw; height:100vh; overflow:hidden; font-family:
 .meta-lbl { font-family:'Barlow Condensed',sans-serif; font-size:15px; letter-spacing:0.38em; color:var(--yellow); margin-bottom:6px; text-transform:uppercase; }
 .meta-val { font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:28px; color:#fff; }
 
+
+/* ── BOTTOM ROW (orologio + data) ── */
+.bottom-row {
+  display: flex;
+  align-items: baseline;
+  gap: 18px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(255,255,255,0.18);
+  flex-shrink: 0;
+}
+.clock-inline {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 400;
+  font-size: 21px;
+  letter-spacing: 0.18em;
+  color: rgba(255,255,255,0.88);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+  text-transform: uppercase;
+  position: relative;
+  top: 5px;
+}
+
+/* ── TIMER BLOCK ── */
+.timer-block {
+  background: rgba(255,229,0,0.06);
+  border: 1px solid rgba(255,229,0,0.30);
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin-bottom: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.timer-block.rest {
+  background: rgba(255,255,255,0.04);
+  border-color: rgba(255,255,255,0.18);
+}
+.timer-block.rest .timer-phase { color: rgba(255,255,255,0.55); }
+.timer-block.rest .timer-countdown { color: rgba(255,255,255,0.70); }
+
+.timer-phase {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 900;
+  font-size: 13px;
+  letter-spacing: 0.40em;
+  color: #FFE500;
+  text-transform: uppercase;
+}
+.timer-countdown {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 900;
+  font-size: 64px;
+  line-height: 1;
+  color: #FFE500;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+}
+.timer-info {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 14px;
+  letter-spacing: 0.18em;
+  color: rgba(255,255,255,0.45);
+  text-transform: uppercase;
+}
+
+/* ── DATA ── */
 .date-row { font-family:'Barlow Condensed',sans-serif; font-size:21px; letter-spacing:0.18em; color:rgba(255,255,255,0.88); text-transform:uppercase; padding-top:18px; border-top:1px solid var(--linehi); display:flex; align-items:center; gap:10px; }
 .date-row::before { content:""; display:inline-block; width:18px; height:3px; background:var(--yellow); border-radius:2px; }
 
@@ -165,7 +232,20 @@ function initScroll(){
         <div class="meta-item"><div class="meta-lbl">Esercizi</div><div class="meta-val">13</div></div>
         <div class="meta-item"><div class="meta-lbl">Sezioni</div><div class="meta-val">3</div></div>
       </div>
-      <div class="date-row">Lunedì 18 Maggio 2026</div>
+      
+<!-- Timer WOD sincronizzato -->
+<div class="timer-block" id="timer-block">
+  <div class="timer-phase" id="timer-phase">LAVORO</div>
+  <div class="timer-countdown" id="timer-countdown">00:00</div>
+  <div class="timer-info" id="timer-info">Round 1 / —</div>
+</div>
+
+<!-- Orologio + Data sulla stessa riga -->
+<div class="bottom-row">
+  <span class="clock-inline" id="clock-row">00:00:00</span>
+  <span class="date-row" id="date-row"></span>
+</div>
+
     </div>
   </div>
 
@@ -305,4 +385,178 @@ function initScroll(){
   </div>
 
 </div></div>
+
+<script>
+// Data dinamica
+(function() {
+  const el = document.getElementById('date-row');
+  if (!el) return;
+  const oggi = new Date();
+  const str = oggi.toLocaleDateString('it-IT', {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+  }).toUpperCase();
+  el.textContent = str;
+})();
+</script>
+
+<script>
+// ── OROLOGIO ──────────────────────────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  const h = String(now.getHours()).padStart(2,'0');
+  const m = String(now.getMinutes()).padStart(2,'0');
+  const s = String(now.getSeconds()).padStart(2,'0');
+  const el = document.getElementById('clock-row');
+  if (el) el.textContent = h + ':' + m + ':' + s;
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ── TIMER SINCRONIZZATO ───────────────────────────────────────────
+// Legge i parametri dal WOD già nella pagina
+// Cerca la prima sezione con workTime/restTime (formato INTERVALS)
+function getTimerParams() {
+  // Cerca nello schema delle sezioni il testo "s lavoro · Xs riposo · N rounds"
+  const schemas = document.querySelectorAll('.section-schema');
+  for (const s of schemas) {
+    const text = s.textContent;
+    // Cerca pattern tipo "75s lavoro · 25s riposo · 24 rounds"
+    const match = text.match(/(\d+)s\s+lavoro\s*·\s*(\d+)s\s+riposo(?:\s*·\s*(\d+)\s+rounds?)?/i);
+    if (match) {
+      return {
+        workTime: parseInt(match[1]),
+        restTime: parseInt(match[2]),
+        rounds:   parseInt(match[3]) || 999,
+        found:    true
+      };
+    }
+    // Cerca anche formato "Xs work · Xs rest"
+    const match2 = text.match(/(\d+)s\s+work\s*[·\/]\s*(\d+)s\s+rest/i);
+    if (match2) {
+      return {
+        workTime: parseInt(match2[1]),
+        restTime: parseInt(match2[2]),
+        rounds:   999,
+        found:    true
+      };
+    }
+  }
+  // Default: 45s/20s se non trovato
+  return { workTime: 45, restTime: 20, rounds: 999, found: false };
+}
+
+function runTimer() {
+  const params = getTimerParams();
+  const WORK = params.workTime;
+  const REST = params.restTime;
+  const CYCLE = WORK + REST;
+  const TOTAL_ROUNDS = params.rounds;
+
+  const phaseEl     = document.getElementById('timer-phase');
+  const countEl     = document.getElementById('timer-countdown');
+  const infoEl      = document.getElementById('timer-info');
+  const blockEl     = document.getElementById('timer-block');
+  if (!phaseEl || !countEl) return;
+
+  // Audio beep (Web Audio API — funziona senza file esterni)
+  let audioCtx = null;
+  function beep(freq, duration, volume) {
+    try {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.frequency.value = freq;
+      osc.type = 'square';
+      gain.gain.setValueAtTime(volume || 0.3, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+      osc.start(audioCtx.currentTime);
+      osc.stop(audioCtx.currentTime + duration);
+    } catch(e) {}
+  }
+
+  function beepWork() {
+    // 2 beep corti + 1 lungo = inizio lavoro
+    beep(880, 0.12, 0.4);
+    setTimeout(() => beep(880, 0.12, 0.4), 150);
+    setTimeout(() => beep(1100, 0.35, 0.5), 300);
+  }
+  function beepRest() {
+    // 1 beep basso = riposo
+    beep(440, 0.4, 0.3);
+  }
+
+  let lastPhase = null;
+  let lastSecond = null;
+
+  function tick() {
+    // Ora corrente in ms — riferimento assoluto per sync tra TV
+    const now = Date.now();
+    const posInCycle = Math.floor(now / 1000) % CYCLE;
+    const totalCyclesElapsed = Math.floor(Math.floor(now / 1000) / CYCLE);
+    const currentRound = (totalCyclesElapsed % TOTAL_ROUNDS) + 1;
+    const currentSecond = Math.floor(now / 1000);
+
+    let phase, remaining;
+    if (posInCycle < WORK) {
+      phase     = 'work';
+      remaining = WORK - posInCycle;
+    } else {
+      phase     = 'rest';
+      remaining = CYCLE - posInCycle;
+    }
+
+    // Beep al cambio fase (solo quando il secondo cambia)
+    if (currentSecond !== lastSecond) {
+      lastSecond = currentSecond;
+      if (phase !== lastPhase) {
+        if (phase === 'work') beepWork();
+        else beepRest();
+        lastPhase = phase;
+      }
+      // Beep conto alla rovescia ultimi 3 secondi
+      if (remaining <= 3 && remaining > 0) {
+        beep(660, 0.08, 0.2);
+      }
+    }
+
+    // UI
+    const min = String(Math.floor(remaining / 60)).padStart(2,'0');
+    const sec = String(remaining % 60).padStart(2,'0');
+    countEl.textContent = min + ':' + sec;
+
+    if (phase === 'work') {
+      phaseEl.textContent = 'LAVORO';
+      phaseEl.style.color = '#FFE500';
+      countEl.style.color = '#FFE500';
+      blockEl.classList.remove('rest');
+    } else {
+      phaseEl.textContent = 'RIPOSO';
+      phaseEl.style.color = 'rgba(255,255,255,0.55)';
+      countEl.style.color = 'rgba(255,255,255,0.70)';
+      blockEl.classList.add('rest');
+    }
+
+    infoEl.textContent = 'Round ' + currentRound + (TOTAL_ROUNDS < 999 ? ' / ' + TOTAL_ROUNDS : '') +
+      '  ·  ' + WORK + 's + ' + REST + 's' +
+      (params.found ? '' : '  (default)');
+
+    requestAnimationFrame(tick);
+  }
+
+  // Inizializza lastPhase senza beep
+  const now0 = Date.now();
+  const pos0 = Math.floor(now0 / 1000) % CYCLE;
+  lastPhase = pos0 < WORK ? 'work' : 'rest';
+  lastSecond = Math.floor(now0 / 1000);
+
+  requestAnimationFrame(tick);
+}
+
+// Avvia il timer dopo che la pagina è caricata
+// (aspetta un tick per permettere al DOM di essere pronto)
+setTimeout(runTimer, 100);
+</script>
+
 </body></html>
