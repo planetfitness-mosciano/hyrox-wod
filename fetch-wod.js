@@ -97,7 +97,9 @@ const CSS = `
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{width:1920px;height:1080px;overflow:hidden;background:var(--bg);color:#fff;font-family:'Barlow',sans-serif}
 .screen{width:1920px;height:1080px;display:grid;grid-template-columns:520px 1fr;overflow:hidden}
-.left{background:var(--bg2);border-right:2px solid var(--linehi);display:flex;flex-direction:column;padding:0 0 44px;flex-shrink:0}
+.left{background:var(--bg2);border-right:2px solid var(--linehi);display:flex;flex-direction:column;padding:0;flex-shrink:0}
+.clock-block{padding:16px 40px 28px;border-top:1px solid var(--linehi);flex-shrink:0}
+.clock-time{font-family:'Barlow Condensed',sans-serif;font-weight:200;font-size:86px;letter-spacing:.06em;color:#fff;line-height:1}
 .left-top-bar{width:100%;height:6px;background:var(--yellow)}
 .logo-block{background:#000;border-bottom:1px solid var(--linehi);padding:26px 36px 22px;display:flex;flex-direction:column;gap:0}
 .hyrox-wrap{width:100%;margin-bottom:14px}.hyrox-img{width:100%;height:auto;display:block}
@@ -271,6 +273,9 @@ ${CSS}
       </div>
       <div class="date-row">${esc(dateStr)}</div>
     </div>
+    <div class="clock-block">
+      <div class="clock-time" id="clock"></div>
+    </div>
   </div>
   <div class="right">
     <div class="right-top-bar"></div>
@@ -288,10 +293,37 @@ ${CSS}
 ${SCROLL_SCRIPT}
 </script>
 <script>
-// Ricarica la pagina ogni ora per aggiornare gli URL video
-setTimeout(() => location.reload(), 60 * 60 * 1000);
+// Orologio live
+function updateClock(){
+  const n=new Date();
+  const pad=x=>String(x).padStart(2,'0');
+  const el=document.getElementById('clock');
+  if(el) el.textContent=pad(n.getHours())+':'+pad(n.getMinutes())+':'+pad(n.getSeconds());
+}
+updateClock();
+setInterval(updateClock,1000);
+// Ricarica la pagina ogni ora
+setTimeout(()=>location.reload(), 60*60*1000);
 </script>
 </body></html>`;
+}
+
+// ─── Traduzione automatica EN→IT ─────────────────────────────────────────────
+
+async function translateToItalian(text) {
+  if (!text || !text.trim()) return text;
+  try {
+    const url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=it&dt=t&q='
+               + encodeURIComponent(text);
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+    // data[0] = array di coppie [traduzione, originale]
+    return data[0].map(chunk => chunk[0]).join('');
+  } catch (e) {
+    console.log('Traduzione non disponibile, uso testo originale:', e.message);
+    return text;
+  }
 }
 
 // ─── GraphQL helpers ──────────────────────────────────────────────────────────
@@ -471,7 +503,13 @@ async function main() {
   const lesson = await getLessonDetails(token, lessonId);
   console.log(`Lezione: "${lesson.name}" — ${lesson.sections.length} sezioni`);
 
-  // Step 4: Generate HTML
+  // Step 4: Traduci descrizione in italiano
+  if (lesson.description) {
+    console.log('Traduzione descrizione...');
+    lesson.description = await translateToItalian(lesson.description);
+  }
+
+  // Step 5: Generate HTML
   const html = buildHtml(lesson, isoDate);
 
   // Step 5: Write to file
