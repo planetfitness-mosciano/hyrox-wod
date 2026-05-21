@@ -32,6 +32,14 @@ jobs:
           HYROX_PASSWORD: ${{ secrets.HYROX_PASSWORD }}
         run: node fetch-wod.js
 
+      - name: Upload debug screenshot (solo in caso di errore)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-screenshot
+          path: debug-login.png
+          if-no-files-found: ignore
+
       - name: Commit and push index.html
         run: |
           git config user.name  "github-actions[bot]"
