@@ -257,7 +257,7 @@ ${CSS}
     <div class="logo-block">
       <div class="hyrox-wrap"><div class="hyrox-fallback">HYROX</div></div>
       <div class="logo-divider"></div>
-      <div class="pf-wrap"></div>
+      <div class="pf-wrap"><img class="pf-img" src="https://planet.fit/wp-content/uploads/2023/02/Logo-planet_bianco.png" alt="Planet Fitness"></div>
     </div>
     <div class="left-body">
       <div class="eyebrow">Workout of the Day</div>
