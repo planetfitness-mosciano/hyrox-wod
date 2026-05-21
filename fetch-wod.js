@@ -362,10 +362,24 @@ async function captureToken() {
   console.log('Avvio Puppeteer...');
   const browser = await puppeteer.launch({
     headless: 'new',
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-blink-features=AutomationControlled',
+    ]
   });
 
   const page = await browser.newPage();
+
+  // Nascondi segnali di automazione (evita bot-detection del portale)
+  await page.evaluateOnNewDocument(() => {
+    Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+  });
+  await page.setViewport({ width: 1366, height: 768 });
+  await page.setUserAgent(
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+  );
 
   // Inject fetch interceptor on EVERY new document (survives cross-domain navigation)
   await page.evaluateOnNewDocument(() => {
@@ -393,23 +407,22 @@ async function captureToken() {
 
   // Fill credentials (page.type fires real keyboard events — works with React)
   await page.click('input[placeholder="Email"]');
-  await page.type('input[placeholder="Email"]', EMAIL, { delay: 40 });
+  await page.type('input[placeholder="Email"]', EMAIL, { delay: 60 });
   await page.click('input[placeholder="Password"]');
-  await page.type('input[placeholder="Password"]', PASSWORD, { delay: 40 });
+  await page.type('input[placeholder="Password"]', PASSWORD, { delay: 60 });
 
+  // Premi Enter e attendi la catena completa di redirect OAuth (senza waitForNavigation
+  // che si risolve al primo redirect intermedio e non all'arrivo finale)
   console.log('Login in corso...');
-  await Promise.all([
-    page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 45000 }),
-    page.keyboard.press('Enter')
-  ]);
+  await page.keyboard.press('Enter');
 
-  // Wait until we land on performancehub (might need a second redirect)
   console.log('Attendendo redirect a performancehub...');
   await page.waitForFunction(
     () => window.location.href.includes('performancehub.hyrox365.com') &&
           !window.location.href.includes('/auth/callback'),
-    { timeout: 30000, polling: 500 }
+    { timeout: 60000, polling: 1000 }
   );
+  console.log('Su performancehub:', page.url());
 
   // The app loads; wait for a workout link, then click it to trigger an API call
   console.log('Clic su workout per catturare il token...');
