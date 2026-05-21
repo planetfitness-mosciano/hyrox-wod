@@ -372,7 +372,7 @@ async function captureToken() {
 
   const page = await browser.newPage();
 
-  // Nascondi segnali di automazione (evita bot-detection del portale)
+  // Anti-bot: nascondi webdriver
   await page.evaluateOnNewDocument(() => {
     Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
   });
@@ -381,72 +381,76 @@ async function captureToken() {
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
   );
 
-  // Inject fetch interceptor on EVERY new document (survives cross-domain navigation)
-  await page.evaluateOnNewDocument(() => {
-    const orig = window.fetch;
-    window._tok = null;
-    window.fetch = function (...args) {
-      try {
-        const opts = args[1] || {};
-        let auth = null;
-        if (opts.headers instanceof Headers)
-          auth = opts.headers.get('Authorization');
-        else if (opts.headers)
-          auth = opts.headers['Authorization'] || opts.headers['authorization'];
-        if (auth && auth.startsWith('Bearer '))
-          window._tok = auth.slice(7);
-      } catch (_) {}
-      return orig.apply(this, args);
-    };
+  // Intercept a livello di rete: cattura il Bearer token da QUALSIASI richiesta HTTP
+  // (più affidabile di window.fetch injection che dipende dalla SPA)
+  let capturedToken = null;
+  await page.setRequestInterception(true);
+  page.on('request', req => {
+    const auth = req.headers()['authorization'];
+    if (auth && auth.startsWith('Bearer ')) capturedToken = auth.slice(7);
+    req.continue();
   });
 
-  // Navigate to portal login
-  console.log('Apertura pagina login...');
-  await page.goto(PORTAL, { waitUntil: 'domcontentloaded', timeout: 30000 });
+  // IMPORTANTE: includi redirect_to già nel login iniziale.
+  // Se navigassimo prima senza redirect_to e poi tornassimo con redirect_to
+  // da utente già autenticato, il portale ignora il parametro e NON completa l'SSO.
+  const loginUrl = `${PORTAL}?redirect_to=${encodeURIComponent(HUB + '/portal-authorization')}`;
+  console.log('Apertura login (con redirect_to hub)...');
+  await page.goto(loginUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
   await page.waitForSelector('input[placeholder="Email"]', { timeout: 15000 });
 
-  // Fill credentials (page.type fires real keyboard events — works with React)
   await page.click('input[placeholder="Email"]');
   await page.type('input[placeholder="Email"]', EMAIL, { delay: 60 });
   await page.click('input[placeholder="Password"]');
   await page.type('input[placeholder="Password"]', PASSWORD, { delay: 60 });
 
-  // Premi Enter e aspetta che il portale carichi la pagina /user
-  console.log('Login in corso...');
-  await page.keyboard.press('Enter');
-  await page.waitForFunction(
-    () => !window.location.href.includes('/login'),
-    { timeout: 30000, polling: 500 }
-  );
-  console.log('Portale autenticato, URL:', page.url());
+  console.log('Submit login...');
+  // Avvia navigazione e pressione Enter in parallelo per evitare race condition
+  await Promise.all([
+    page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 60000 }),
+    page.keyboard.press('Enter'),
+  ]);
+  console.log('URL dopo submit:', page.url());
 
-  // Il portale NON redirige automaticamente a performancehub:
-  // navighiamo noi verso l'hub. Il portale rileverà la sessione e farà SSO.
-  console.log('Navigazione verso performancehub...');
-  await page.goto(HUB, { waitUntil: 'domcontentloaded', timeout: 30000 });
+  // Funzione di check: siamo sull'hub e fuori da portal-authorization?
+  const onHub = () =>
+    window.location.origin === 'https://performancehub.hyrox365.com' &&
+    !window.location.pathname.includes('/portal-authorization');
 
-  // IMPORTANTE: usare window.location.origin (non includes) perché il redirect URL
-  // portal.hyrox365.com/login?redirect_to=https://performancehub... contiene
-  // "performancehub" nel query string ma non è l'origin reale.
-  console.log('Attendendo SSO su performancehub...');
-  await page.waitForFunction(
-    () => window.location.origin === 'https://performancehub.hyrox365.com' &&
-          !window.location.pathname.includes('/portal-authorization'),
-    { timeout: 45000, polling: 1000 }
-  );
+  // Se il portale ha già completato l'SSO e siamo sull'hub, procedi.
+  // Altrimenti aspetta (il portale potrebbe fare redirect JS asincrono).
+  if (!(await page.evaluate(onHub))) {
+    console.log('Aspettando SSO su performancehub... (URL corrente:', page.url(), ')');
+    try {
+      await page.waitForFunction(onHub, { timeout: 60000, polling: 500 });
+    } catch (e) {
+      console.log('TIMEOUT SSO — URL finale:', page.url());
+      await page.screenshot({ path: 'debug-login.png', fullPage: true });
+      await browser.close();
+      throw e;
+    }
+  }
   console.log('Su performancehub:', page.url());
 
-  // Naviga a /workouts per garantire una chiamata GraphQL autenticata
-  console.log('Navigazione a /workouts per catturare il token...');
+  // Naviga a /workouts per triggerare le chiamate GraphQL autenticate
+  console.log('Navigazione a /workouts...');
   await page.goto(HUB + '/workouts', { waitUntil: 'domcontentloaded', timeout: 30000 });
 
-  // Poll until token captured (max 20 seconds)
-  const token = await page.waitForFunction(() => window._tok, { timeout: 20000, polling: 200 })
-    .then(h => h.jsonValue());
+  // Aspetta token (intercettato a livello di rete, max 20s)
+  const deadline = Date.now() + 20000;
+  while (!capturedToken && Date.now() < deadline) {
+    await new Promise(r => setTimeout(r, 200));
+  }
+
+  if (!capturedToken) {
+    await page.screenshot({ path: 'debug-login.png', fullPage: true });
+    await browser.close();
+    throw new Error('Token non catturato entro 20s: nessuna richiesta GraphQL autenticata su /workouts');
+  }
 
   console.log('Token catturato.');
   await browser.close();
-  return token;
+  return capturedToken;
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
