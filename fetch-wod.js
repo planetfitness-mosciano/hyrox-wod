@@ -400,7 +400,7 @@ async function captureToken() {
   console.log('Login in corso...');
   await Promise.all([
     page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 45000 }),
-    page.click('button[type="submit"]')
+    page.keyboard.press('Enter')
   ]);
 
   // Wait until we land on performancehub (might need a second redirect)
