@@ -421,29 +421,27 @@ async function captureToken() {
   console.log('Portale autenticato, URL:', page.url());
 
   // Il portale NON redirige automaticamente a performancehub:
-  // navighiamo noi verso l'hub. Il cookie di sessione fa SSO automatico.
+  // navighiamo noi verso l'hub. Il portale rileverà la sessione e farà SSO.
   console.log('Navigazione verso performancehub...');
   await page.goto(HUB, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
-  // Attendi che il callback OAuth completi e arrivi sulla pagina principale
-  console.log('Attendendo fine callback OAuth...');
+  // IMPORTANTE: usare window.location.origin (non includes) perché il redirect URL
+  // portal.hyrox365.com/login?redirect_to=https://performancehub... contiene
+  // "performancehub" nel query string ma non è l'origin reale.
+  console.log('Attendendo SSO su performancehub...');
   await page.waitForFunction(
-    () => window.location.href.includes('performancehub.hyrox365.com') &&
-          !window.location.href.includes('/auth/callback'),
-    { timeout: 30000, polling: 500 }
+    () => window.location.origin === 'https://performancehub.hyrox365.com' &&
+          !window.location.pathname.includes('/portal-authorization'),
+    { timeout: 45000, polling: 1000 }
   );
   console.log('Su performancehub:', page.url());
 
-  // The app loads; wait for a workout link, then click it to trigger an API call
-  console.log('Clic su workout per catturare il token...');
-  await page.waitForSelector('a[href*="/workouts/"]', { timeout: 20000 });
-  await page.evaluate(() => {
-    const link = document.querySelector('a[href*="/workouts/"]');
-    if (link) link.click();
-  });
+  // Naviga a /workouts per garantire una chiamata GraphQL autenticata
+  console.log('Navigazione a /workouts per catturare il token...');
+  await page.goto(HUB + '/workouts', { waitUntil: 'domcontentloaded', timeout: 30000 });
 
-  // Poll until token captured (max 15 seconds)
-  const token = await page.waitForFunction(() => window._tok, { timeout: 15000, polling: 200 })
+  // Poll until token captured (max 20 seconds)
+  const token = await page.waitForFunction(() => window._tok, { timeout: 20000, polling: 200 })
     .then(h => h.jsonValue());
 
   console.log('Token catturato.');
