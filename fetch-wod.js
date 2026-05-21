@@ -411,17 +411,31 @@ async function captureToken() {
   await page.click('input[placeholder="Password"]');
   await page.type('input[placeholder="Password"]', PASSWORD, { delay: 60 });
 
-  // Premi Enter e attendi la catena completa di redirect OAuth (senza waitForNavigation
-  // che si risolve al primo redirect intermedio e non all'arrivo finale)
+  // Premi Enter e attendi la catena completa di redirect OAuth
   console.log('Login in corso...');
   await page.keyboard.press('Enter');
 
+  // Debug: aspetta 5s e logga dove si trova il browser
+  await new Promise(r => setTimeout(r, 5000));
+  console.log('URL dopo 5s:', page.url());
+  console.log('Title:', await page.title());
+
   console.log('Attendendo redirect a performancehub...');
-  await page.waitForFunction(
-    () => window.location.href.includes('performancehub.hyrox365.com') &&
-          !window.location.href.includes('/auth/callback'),
-    { timeout: 60000, polling: 1000 }
-  );
+  try {
+    await page.waitForFunction(
+      () => window.location.href.includes('performancehub.hyrox365.com') &&
+            !window.location.href.includes('/auth/callback'),
+      { timeout: 60000, polling: 1000 }
+    );
+  } catch (e) {
+    console.log('TIMEOUT — URL corrente:', page.url());
+    console.log('TIMEOUT — Title:', await page.title());
+    // Salva screenshot per diagnostica (caricato come artifact GitHub)
+    await page.screenshot({ path: 'debug-login.png', fullPage: true });
+    console.log('Screenshot salvato: debug-login.png');
+    await browser.close();
+    throw e;
+  }
   console.log('Su performancehub:', page.url());
 
   // The app loads; wait for a workout link, then click it to trigger an API call
