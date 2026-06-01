@@ -375,15 +375,16 @@ html,body{width:1920px;height:1080px;overflow:hidden;background:var(--bg);color:
 .section-schema{font-size:20px;letter-spacing:.06em;color:var(--yellow);font-weight:600;margin-bottom:24px}
 
 /* Esercizio */
-.ex-name{font-weight:900;font-size:80px;line-height:.88;letter-spacing:-.01em;text-transform:uppercase;color:#fff;margin-bottom:12px;flex:1;overflow:hidden}
-.ex-pos{font-weight:300;font-size:26px;letter-spacing:.18em;color:var(--dim);margin-bottom:6px}
+.ex-name{font-weight:900;font-size:108px;line-height:.88;letter-spacing:-.02em;text-transform:uppercase;color:#fff;margin-bottom:0;overflow:hidden}
+.ex-spacer{flex:1;min-height:16px}
+.ex-pos{font-weight:300;font-size:28px;letter-spacing:.18em;color:var(--dim);margin-bottom:8px}
 .ex-rpe{font-size:18px;letter-spacing:.12em;color:rgba(255,229,0,.75);margin-bottom:20px}
 
 /* Timer */
 .timer-block{display:flex;flex-direction:column;gap:2px;padding-bottom:12px}
-.work-label{font-weight:900;font-size:44px;letter-spacing:.32em;color:var(--yellow);text-transform:uppercase;line-height:1;margin-bottom:4px}
-.timer-display{font-weight:200;font-size:116px;letter-spacing:.04em;color:#fff;line-height:1}
-.round-label{font-weight:600;font-size:28px;letter-spacing:.24em;color:var(--dim);text-transform:uppercase;margin-top:4px}
+.work-label{font-weight:900;font-size:48px;letter-spacing:.30em;color:var(--yellow);text-transform:uppercase;line-height:1;margin-bottom:6px}
+.timer-display{font-weight:200;font-size:128px;letter-spacing:.03em;color:#fff;line-height:1}
+.round-label{font-weight:600;font-size:32px;letter-spacing:.22em;color:var(--dim);text-transform:uppercase;margin-top:6px}
 .loc-badge{font-weight:700;font-size:18px;letter-spacing:.18em;color:#000;background:var(--yellow);border-radius:4px;padding:6px 18px;text-transform:uppercase;align-self:flex-start;margin-bottom:12px}
 
 /* Bottom bar */
@@ -414,6 +415,7 @@ video.ex-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover
       <div class="ex-pos" id="ex-pos">1 / ${total}</div>
       <div class="ex-name" id="ex-name">—</div>
       <div class="ex-rpe" id="ex-rpe"></div>
+      <div class="ex-spacer"></div>
       <div class="timer-block">
         <span class="work-label" id="work-label">LAVORO</span>
         <div class="timer-display" id="timer">00:00</div>
