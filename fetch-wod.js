@@ -398,6 +398,7 @@ video.ex-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover
 .video-overlay{position:absolute;inset:0;background:linear-gradient(to right,rgba(0,0,0,.45) 0%,transparent 60%);z-index:2;pointer-events:none}
 .loading-msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:24px;letter-spacing:.18em;color:rgba(255,255,255,.35);z-index:3}
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.5.15/hls.min.js"></script>
 </head>
 <body>
 <div class="screen">
@@ -444,12 +445,34 @@ function pad(n){ return String(n).padStart(2,'0'); }
 function loadVideo(url) {
   const vid = document.getElementById('ex-video');
   const msg = document.getElementById('loading-msg');
-  if (!url) { vid.src=''; msg.style.display='flex'; return; }
-  msg.style.display='none';
-  if (vid.src !== url) {
-    vid.src = url;
-    vid.load();
-    vid.play().catch(() => {});
+  if (!url) {
+    if (window._hls) { window._hls.destroy(); window._hls = null; }
+    vid.src = ''; msg.style.display = 'flex'; return;
+  }
+  if (vid.getAttribute('data-current') === url) return; // già caricato
+  vid.setAttribute('data-current', url);
+  msg.style.display = 'none';
+
+  // HLS.js: usato se il browser non supporta HLS nativamente (Android/Fire TV)
+  if (typeof Hls !== 'undefined' && Hls.isSupported()) {
+    if (window._hls) window._hls.destroy();
+    const hls = new Hls({ autoStartLoad: true, enableWorker: false });
+    hls.loadSource(url);
+    hls.attachMedia(vid);
+    hls.on(Hls.Events.MANIFEST_PARSED, () => { vid.play().catch(() => {}); });
+    hls.on(Hls.Events.ERROR, (e, d) => {
+      if (d.fatal) {
+        // Fallback: prova src diretto (potrebbe essere MP4 non HLS)
+        vid.src = url; vid.load(); vid.play().catch(() => {});
+      }
+    });
+    window._hls = hls;
+  } else if (vid.canPlayType('application/vnd.apple.mpegurl')) {
+    // Safari: HLS nativo
+    vid.src = url; vid.load(); vid.play().catch(() => {});
+  } else {
+    // Fallback diretto
+    vid.src = url; vid.load(); vid.play().catch(() => {});
   }
 }
 
