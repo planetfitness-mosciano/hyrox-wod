@@ -327,8 +327,9 @@ function buildTimerHtml(lesson, isoDate, videoField) {
           // Estrai URL video
           let videoUrl = '';
           if (videoField && ex.exercise[videoField.name]) {
-            const v = ex.exercise[videoField.name];
-            videoUrl = (typeof v === 'string') ? v : (v?.url || '');
+            const v       = ex.exercise[videoField.name];
+            const subKey  = videoField.videoSubField || 'url';
+            videoUrl = (typeof v === 'string') ? v : (v?.[subKey] || '');
           }
           const exWork = wt > 0 ? wt : (ex.duration || 40);
           const exRest = rt;
@@ -558,39 +559,48 @@ async function getTodayLessonId(token) {
 
 async function getExerciseVideoField(token) {
   try {
+    // Introspect Exercise AND Video types in una sola query
     const data = await gql(token, `{
-      __type(name: "Exercise") {
+      exerciseType: __type(name: "Exercise") {
         fields { name type { kind name ofType { kind name } } }
       }
+      videoType: __type(name: "Video") {
+        fields { name type { kind name } }
+      }
     }`);
-    const fields = data.__type?.fields || [];
 
-    // Dump TUTTI i campi su file di debug (committato nel repo)
-    const dump = fields.map(f => {
-      const kind  = f.type.kind === 'NON_NULL' ? (f.type.ofType?.kind  || '?') : f.type.kind;
-      const tname = f.type.kind === 'NON_NULL' ? (f.type.ofType?.name  || '?') : (f.type.name || '?');
-      return `${f.name}: ${kind}/${tname}`;
+    const exFields  = data.exerciseType?.fields || [];
+    const vidFields = data.videoType?.fields   || [];
+
+    // Dump debug
+    const exDump  = exFields.map(f => {
+      const k = f.type.kind === 'NON_NULL' ? (f.type.ofType?.kind||'?') : f.type.kind;
+      const t = f.type.kind === 'NON_NULL' ? (f.type.ofType?.name||'?') : (f.type.name||'?');
+      return `${f.name}: ${k}/${t}`;
     }).join('\n');
-    fs.writeFileSync(path.join(__dirname, 'debug-exercise-fields.txt'), dump, 'utf8');
-    console.log('=== Tutti i campi Exercise ===');
-    console.log(dump);
-    console.log('==============================');
+    const vidDump = vidFields.map(f => `${f.name}: ${f.type.kind}/${f.type.name||'?'}`).join('\n');
+    const fullDump = `=== Exercise ===\n${exDump}\n\n=== Video ===\n${vidDump}`;
+    fs.writeFileSync(path.join(__dirname, 'debug-exercise-fields.txt'), fullDump, 'utf8');
+    console.log(fullDump);
 
-    // Criteri di ricerca ampliati
-    const found = fields.find(f => {
-      const n = f.name.toLowerCase();
-      return n.includes('video') || n.includes('media') || n.includes('asset') ||
-             n.includes('stream') || n.includes('play')  || n.includes('file')  ||
-             n.includes('content') || n.includes('url')  || n.includes('thumb');
-    });
-    if (!found) {
-      console.log('Nessun campo video trovato. Controlla debug-exercise-fields.txt nel repo.');
+    // Trova campo video sull'Exercise
+    const videoField = exFields.find(f => f.name === 'video');
+    if (!videoField) {
+      console.log('Campo "video" non trovato su Exercise.');
       return null;
     }
-    const kind  = found.type.kind === 'NON_NULL' ? (found.type.ofType?.kind || 'SCALAR') : found.type.kind;
-    const query = (kind === 'SCALAR' || kind === 'NON_NULL') ? found.name : `${found.name} { url }`;
-    console.log(`Campo video trovato: ${found.name} (${kind}) — query: "${query}"`);
-    return { name: found.name, query };
+
+    // Trova il subfield URL nel tipo Video
+    const urlSubField = vidFields.find(f => {
+      const n = f.name.toLowerCase();
+      return n === 'url' || n.includes('url') || n.includes('src') || n === 'href' || n.includes('stream');
+    });
+
+    const subField = urlSubField?.name || 'url';
+    const query    = `video { ${subField} }`;
+    console.log(`Campo video: video.${subField} — query: "${query}"`);
+    console.log(`Campi Video disponibili: ${vidFields.map(f=>f.name).join(', ')}`);
+    return { name: 'video', query, videoSubField: subField };
   } catch (e) {
     console.log('Introspection video field fallita:', e.message);
     return null;
