@@ -564,17 +564,32 @@ async function getExerciseVideoField(token) {
       }
     }`);
     const fields = data.__type?.fields || [];
-    console.log('Campi Exercise:', fields.map(f => f.name).join(', '));
-    const found = fields.find(f =>
-      f.name.toLowerCase().includes('video') ||
-      f.name.toLowerCase().includes('media')
-    );
-    if (!found) { console.log('Nessun campo video trovato.'); return null; }
-    const kind = found.type.kind === 'NON_NULL'
-      ? (found.type.ofType?.kind || 'SCALAR')
-      : found.type.kind;
+
+    // Dump TUTTI i campi su file di debug (committato nel repo)
+    const dump = fields.map(f => {
+      const kind  = f.type.kind === 'NON_NULL' ? (f.type.ofType?.kind  || '?') : f.type.kind;
+      const tname = f.type.kind === 'NON_NULL' ? (f.type.ofType?.name  || '?') : (f.type.name || '?');
+      return `${f.name}: ${kind}/${tname}`;
+    }).join('\n');
+    fs.writeFileSync(path.join(__dirname, 'debug-exercise-fields.txt'), dump, 'utf8');
+    console.log('=== Tutti i campi Exercise ===');
+    console.log(dump);
+    console.log('==============================');
+
+    // Criteri di ricerca ampliati
+    const found = fields.find(f => {
+      const n = f.name.toLowerCase();
+      return n.includes('video') || n.includes('media') || n.includes('asset') ||
+             n.includes('stream') || n.includes('play')  || n.includes('file')  ||
+             n.includes('content') || n.includes('url')  || n.includes('thumb');
+    });
+    if (!found) {
+      console.log('Nessun campo video trovato. Controlla debug-exercise-fields.txt nel repo.');
+      return null;
+    }
+    const kind  = found.type.kind === 'NON_NULL' ? (found.type.ofType?.kind || 'SCALAR') : found.type.kind;
     const query = (kind === 'SCALAR' || kind === 'NON_NULL') ? found.name : `${found.name} { url }`;
-    console.log(`Campo video: ${found.name} (${kind}) — query fragment: "${query}"`);
+    console.log(`Campo video trovato: ${found.name} (${kind}) — query: "${query}"`);
     return { name: found.name, query };
   } catch (e) {
     console.log('Introspection video field fallita:', e.message);
@@ -739,6 +754,7 @@ async function main() {
   const timerHtml = buildTimerHtml(lesson, isoDate, videoField);
   fs.writeFileSync(TIMER_OUT, timerHtml, 'utf8');
   console.log(`✓ timer.html generato (${timerHtml.length} bytes) → ${TIMER_OUT}`);
+  console.log('✓ debug-exercise-fields.txt scritto');
 }
 
 main().catch(err => {
