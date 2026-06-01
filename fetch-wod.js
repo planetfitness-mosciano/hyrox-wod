@@ -590,14 +590,15 @@ async function getExerciseVideoField(token) {
       return null;
     }
 
-    // Trova il subfield URL nel tipo Video
-    const urlSubField = vidFields.find(f => {
-      const n = f.name.toLowerCase();
-      return n === 'url' || n.includes('url') || n.includes('src') || n === 'href' || n.includes('stream');
-    });
+    // Preferisci signedUrl (CDN con firma temporanea, quello che funziona per playback)
+    // poi url come fallback
+    const subField =
+      vidFields.find(f => f.name === 'signedUrl')?.name ||
+      vidFields.find(f => f.name === 'url')?.name        ||
+      vidFields.find(f => f.name.toLowerCase().includes('url'))?.name ||
+      'url';
 
-    const subField = urlSubField?.name || 'url';
-    const query    = `video { ${subField} }`;
+    const query = `video { ${subField} }`;
     console.log(`Campo video: video.${subField} — query: "${query}"`);
     console.log(`Campi Video disponibili: ${vidFields.map(f=>f.name).join(', ')}`);
     return { name: 'video', query, videoSubField: subField };
