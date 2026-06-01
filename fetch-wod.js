@@ -355,48 +355,49 @@ function buildTimerHtml(lesson, isoDate, videoField) {
 <title>HYROX Timer — Planet Fitness Mosciano</title>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;400;600;700;800;900&family=Barlow:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#000;--bg2:#0d0d0d;--yellow:#FFE500;--linehi:rgba(255,255,255,.18);--dim:rgba(255,255,255,.75)}
+/* Colori come valori diretti per max compatibilità Android WebView */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html,body{width:1920px;height:1080px;overflow:hidden;background:var(--bg);color:#fff;font-family:'Barlow Condensed',sans-serif}
-.screen{width:1920px;height:1080px;display:grid;grid-template-columns:520px 1fr;overflow:hidden}
+html,body{width:1920px;height:1080px;overflow:hidden;background:#000;color:#fff;font-family:'Barlow Condensed',sans-serif}
+/* Flexbox invece di grid per max compatibilità */
+.screen{width:1920px;height:1080px;display:-webkit-flex;display:flex;-webkit-flex-direction:row;flex-direction:row;overflow:hidden}
 
-/* ── LEFT ── */
-.left{background:var(--bg2);border-right:2px solid var(--linehi);display:flex;flex-direction:column;padding:0;flex-shrink:0}
-.left-top-bar{height:6px;background:var(--yellow);flex-shrink:0}
-.logo-block{background:#000;border-bottom:1px solid var(--linehi);padding:26px 36px 22px;display:flex;flex-direction:column}
+/* ── LEFT 520px ── */
+.left{width:520px;min-width:520px;max-width:520px;background:#0d0d0d;border-right:2px solid rgba(255,255,255,.18);display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;padding:0;height:1080px}
+.left-top-bar{height:6px;background:#FFE500;-webkit-flex-shrink:0;flex-shrink:0}
+.logo-block{background:#000;border-bottom:1px solid rgba(255,255,255,.18);padding:26px 36px 22px;display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column}
 .hyrox-wrap{margin-bottom:14px}.hyrox-img{width:100%;height:auto;display:block}
 .logo-divider{height:1px;background:rgba(255,255,255,.18);margin-bottom:14px}
-.pf-wrap{}.pf-img{width:100%;height:auto;display:block;filter:invert(1)}
-.left-body{flex:1;display:flex;flex-direction:column;padding:32px 40px 0}
+.pf-wrap{}.pf-img{width:100%;height:auto;display:block;-webkit-filter:invert(1);filter:invert(1)}
+.left-body{-webkit-flex:1;flex:1;display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;padding:32px 40px 0;overflow:hidden}
 
 /* Sezione */
-.section-badge{display:inline-block;align-self:flex-start;font-weight:900;font-size:16px;letter-spacing:.28em;color:#000;background:var(--yellow);border-radius:3px;padding:5px 14px;text-transform:uppercase;margin-bottom:10px}
+.section-badge{display:inline-block;-webkit-align-self:flex-start;align-self:flex-start;font-weight:900;font-size:16px;letter-spacing:.28em;color:#000;background:#FFE500;border-radius:3px;padding:5px 14px;text-transform:uppercase;margin-bottom:10px}
 .section-name{font-weight:800;font-size:28px;letter-spacing:.10em;color:#fff;text-transform:uppercase;margin-bottom:4px}
-.section-schema{font-size:20px;letter-spacing:.06em;color:var(--yellow);font-weight:600;margin-bottom:24px}
+.section-schema{font-size:20px;letter-spacing:.06em;color:#FFE500;font-weight:600;margin-bottom:24px}
 
 /* Esercizio */
 .ex-name{font-weight:900;font-size:108px;line-height:.88;letter-spacing:-.02em;text-transform:uppercase;color:#fff;margin-bottom:0;overflow:hidden}
-.ex-spacer{flex:1;min-height:16px}
-.ex-pos{font-weight:300;font-size:28px;letter-spacing:.18em;color:var(--dim);margin-bottom:8px}
+.ex-spacer{-webkit-flex:1;flex:1;min-height:16px}
+.ex-pos{font-weight:300;font-size:28px;letter-spacing:.18em;color:rgba(255,255,255,.75);margin-bottom:8px}
 .ex-rpe{font-size:18px;letter-spacing:.12em;color:rgba(255,229,0,.75);margin-bottom:20px}
 
 /* Timer */
-.timer-block{display:flex;flex-direction:column;gap:2px;padding-bottom:12px}
-.work-label{font-weight:900;font-size:48px;letter-spacing:.30em;color:var(--yellow);text-transform:uppercase;line-height:1;margin-bottom:6px}
+.timer-block{display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;gap:2px;padding-bottom:12px}
+.work-label{font-weight:900;font-size:48px;letter-spacing:.30em;color:#FFE500;text-transform:uppercase;line-height:1;margin-bottom:6px}
 .timer-display{font-weight:200;font-size:128px;letter-spacing:.03em;color:#fff;line-height:1}
-.round-label{font-weight:600;font-size:32px;letter-spacing:.22em;color:var(--dim);text-transform:uppercase;margin-top:6px}
-.loc-badge{font-weight:700;font-size:18px;letter-spacing:.18em;color:#000;background:var(--yellow);border-radius:4px;padding:6px 18px;text-transform:uppercase;align-self:flex-start;margin-bottom:12px}
+.round-label{font-weight:600;font-size:32px;letter-spacing:.22em;color:rgba(255,255,255,.75);text-transform:uppercase;margin-top:6px}
+.loc-badge{font-weight:700;font-size:18px;letter-spacing:.18em;color:#000;background:#FFE500;border-radius:4px;padding:6px 18px;text-transform:uppercase;-webkit-align-self:flex-start;align-self:flex-start;margin-bottom:12px}
 
 /* Bottom bar */
-.date-row{font-size:19px;letter-spacing:.18em;color:rgba(255,255,255,.85);text-transform:uppercase;padding:16px 40px 22px;border-top:1px solid var(--linehi);display:flex;align-items:center;gap:16px;flex-shrink:0}
-.clock-inline{font-weight:600;letter-spacing:.15em;color:#fff;flex-shrink:0}
+.date-row{font-size:19px;letter-spacing:.18em;color:rgba(255,255,255,.85);text-transform:uppercase;padding:16px 40px 22px;border-top:1px solid rgba(255,255,255,.18);display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;gap:16px;-webkit-flex-shrink:0;flex-shrink:0}
+.clock-inline{font-weight:600;letter-spacing:.15em;color:#fff;-webkit-flex-shrink:0;flex-shrink:0}
 
-/* ── RIGHT: video ── */
-.right{position:relative;overflow:hidden;background:#000}
-.right-top-bar{position:absolute;top:0;left:0;right:0;height:6px;background:var(--yellow);z-index:5;flex-shrink:0}
-video.ex-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:1}
-.video-overlay{position:absolute;inset:0;background:linear-gradient(to right,rgba(0,0,0,.45) 0%,transparent 60%);z-index:2;pointer-events:none}
-.loading-msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:24px;letter-spacing:.18em;color:rgba(255,255,255,.35);z-index:3}
+/* ── RIGHT: video (1400px) ── */
+.right{position:relative;overflow:hidden;background:#000;background-color:#000;-webkit-flex:1;flex:1;height:1080px;min-height:1080px}
+.right-top-bar{position:absolute;top:0;left:0;right:0;height:6px;background:#FFE500;z-index:5}
+video.ex-video{position:absolute;top:0;left:0;right:0;bottom:0;width:100%;height:100%;-o-object-fit:cover;object-fit:cover;z-index:1;background:#000}
+.video-overlay{position:absolute;top:0;left:0;right:0;bottom:0;background:-webkit-linear-gradient(left,rgba(0,0,0,.45) 0%,transparent 60%);background:linear-gradient(to right,rgba(0,0,0,.45) 0%,transparent 60%);z-index:2;pointer-events:none}
+.loading-msg{position:absolute;top:0;left:0;right:0;bottom:0;display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;-webkit-justify-content:center;justify-content:center;font-size:24px;letter-spacing:.18em;color:rgba(255,255,255,.35);z-index:3;background:#000}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.5.15/hls.min.js"></script>
 </head>
