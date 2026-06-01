@@ -44,7 +44,7 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add index.html
+          git add index.html timer.html debug-exercise-fields.txt
           # Commit solo se c'è qualcosa da committare
           git diff --cached --quiet && echo "Nessuna modifica." || \
             git commit -m "chore: WOD automatico $(date -u +'%Y-%m-%d')"
