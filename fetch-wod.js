@@ -313,7 +313,7 @@ setTimeout(()=>location.reload(), 60*60*1000);
 function buildTimerHtml(lesson, isoDate, videoField) {
   const dateStr = italianDate(isoDate);
 
-  // Flatten: per ogni section × round × exercise → un item nel timer
+  // Flatten: esercizi UNICI (rounds gestiti dal timer JS)
   const items = [];
   for (const s of lesson.sections) {
     const schema  = sectionSchema(s);
@@ -321,31 +321,27 @@ function buildTimerHtml(lesson, isoDate, videoField) {
     const wt      = (s.workTime  > 0) ? s.workTime  : 0;
     const rt      = (s.restTime  > 0) ? s.restTime  : 0;
 
-    for (let round = 1; round <= rounds; round++) {
-      for (const g of s.sectionExerciseGroups) {
-        for (const ex of g.sectionExercises) {
-          // Estrai URL video
-          let videoUrl = '';
-          if (videoField && ex.exercise[videoField.name]) {
-            const v       = ex.exercise[videoField.name];
-            const subKey  = videoField.videoSubField || 'url';
-            videoUrl = (typeof v === 'string') ? v : (v?.[subKey] || '');
-          }
-          const exWork = wt > 0 ? wt : (ex.duration || 40);
-          const exRest = rt;
-          items.push({
-            name: ex.exercise.name,
-            sectionName: s.name,
-            sectionSchema: schema,
-            workTime: exWork,
-            restTime: exRest,
-            totalRounds: rounds,
-            currentRound: round,
-            rpe: ex.rpe || null,
-            videoUrl,
-            durStr: fmtSecs(exWork) || '—'
-          });
+    for (const g of s.sectionExerciseGroups) {
+      for (const ex of g.sectionExercises) {
+        // Estrai URL video
+        let videoUrl = '';
+        if (videoField && ex.exercise[videoField.name]) {
+          const v      = ex.exercise[videoField.name];
+          const subKey = videoField.videoSubField || 'url';
+          videoUrl = (typeof v === 'string') ? v : (v?.[subKey] || '');
         }
+        const exWork = wt > 0 ? wt : (ex.duration || 40);
+        items.push({
+          name: ex.exercise.name,
+          sectionName: s.name,
+          sectionSchema: schema,
+          workTime: exWork,
+          restTime: rt,
+          totalRounds: rounds,
+          rpe: ex.rpe || null,
+          videoUrl,
+          durStr: fmtSecs(exWork) || '—'
+        });
       }
     }
   }
@@ -374,7 +370,7 @@ html,body{width:1920px;height:1080px;overflow:hidden;background:var(--bg);color:
 .left-body{flex:1;display:flex;flex-direction:column;padding:32px 40px 0}
 
 /* Sezione */
-.section-badge{display:inline-block;font-weight:900;font-size:16px;letter-spacing:.28em;color:#000;background:var(--yellow);border-radius:3px;padding:5px 14px;text-transform:uppercase;margin-bottom:10px}
+.section-badge{display:inline-block;align-self:flex-start;font-weight:900;font-size:16px;letter-spacing:.28em;color:#000;background:var(--yellow);border-radius:3px;padding:5px 14px;text-transform:uppercase;margin-bottom:10px}
 .section-name{font-weight:800;font-size:28px;letter-spacing:.10em;color:#fff;text-transform:uppercase;margin-bottom:4px}
 .section-schema{font-size:18px;letter-spacing:.06em;color:var(--yellow);font-weight:600;margin-bottom:28px}
 
@@ -408,9 +404,9 @@ video.ex-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover
   <div class="left">
     <div class="left-top-bar"></div>
     <div class="logo-block">
-      <div class="hyrox-wrap"><img class="hyrox-img" src="data:image/png;base64,\${HYROX_LOGO_B64}" alt="HYROX × PUMA"></div>
+      <div class="hyrox-wrap"><img class="hyrox-img" src="data:image/png;base64,${HYROX_LOGO_B64}" alt="HYROX × PUMA"></div>
       <div class="logo-divider"></div>
-      <div class="pf-wrap"><img class="pf-img" src="data:image/png;base64,\${PF_LOGO_B64}" alt="Planet Fitness"></div>
+      <div class="pf-wrap"><img class="pf-img" src="data:image/png;base64,${PF_LOGO_B64}" alt="Planet Fitness"></div>
     </div>
     <div class="left-body">
       <div class="section-badge" id="section-badge">01</div>
@@ -468,11 +464,27 @@ function updateDisplay() {
   document.getElementById('section-name').textContent  = ex.sectionName;
   document.getElementById('section-schema').textContent= ex.sectionSchema;
   document.getElementById('work-label').textContent    = isWork ? 'LAVORO' : 'RIPOSO';
-  document.getElementById('round-label').textContent   = 'Round '+ex.currentRound;
+  const secSt = (typeof sectionStart === 'function') ? sectionStart(idx) : idx;
+  document.getElementById('round-label').textContent   = 'Round '+((sectionRound && sectionRound[secSt])||1);
   document.getElementById('section-badge').textContent = String(idx+1).padStart(2,'0');
   document.getElementById('ex-rpe').textContent  = ex.rpe ? 'RPE '+ex.rpe : '';
   if (isWork) loadVideo(ex.videoUrl);
 }
+
+// Helpers per navigazione sezioni
+function sectionStart(i) {
+  const sec = EXERCISES[i].sectionName;
+  while (i > 0 && EXERCISES[i-1].sectionName === sec) i--;
+  return i;
+}
+function sectionEnd(i) {
+  const sec = EXERCISES[i].sectionName;
+  while (i < EXERCISES.length-1 && EXERCISES[i+1].sectionName === sec) i++;
+  return i;
+}
+// round corrente per esercizio (indicizzato dall'inizio sezione)
+const sectionRound = {};
+EXERCISES.forEach((ex, i) => { if (i === sectionStart(i)) sectionRound[i] = 1; });
 
 function tick() {
   if (secs > 0) { secs--; updateDisplay(); return; }
@@ -480,7 +492,21 @@ function tick() {
   if (isWork && ex.restTime > 0) {
     isWork = false; secs = ex.restTime;
   } else {
-    idx = (idx + 1) % EXERCISES.length;
+    const end   = sectionEnd(idx);
+    const start = sectionStart(idx);
+    if (idx === end) {
+      // fine sezione: controlla rounds rimanenti
+      const curRound = sectionRound[start] || 1;
+      if (curRound < ex.totalRounds) {
+        sectionRound[start] = curRound + 1;
+        idx = start; // ricomincia sezione
+      } else {
+        sectionRound[start] = 1; // reset per prossimo giro
+        idx = end + 1 < EXERCISES.length ? end + 1 : 0;
+      }
+    } else {
+      idx++;
+    }
     isWork = true; secs = EXERCISES[idx].workTime;
   }
   updateDisplay();
