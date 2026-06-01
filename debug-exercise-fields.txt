@@ -1,0 +1,7 @@
+id: SCALAR/ExerciseId
+name: SCALAR/String
+description: SCALAR/String
+equipment: OBJECT/Equipment
+video: OBJECT/Video
+active: SCALAR/Boolean
+alternativeExercises: LIST/?
