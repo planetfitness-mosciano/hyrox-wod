@@ -1,3 +1,4 @@
+=== Exercise ===
 id: SCALAR/ExerciseId
 name: SCALAR/String
 description: SCALAR/String
@@ -5,3 +6,14 @@ equipment: OBJECT/Equipment
 video: OBJECT/Video
 active: SCALAR/Boolean
 alternativeExercises: LIST/?
+
+=== Video ===
+id: NON_NULL/?
+description: SCALAR/String
+thumbnail: OBJECT/Image
+url: SCALAR/URL
+keyName: SCALAR/String
+signedUrl: SCALAR/URL
+uploadDetails: OBJECT/MediaUploadDetails
+allSubtitles: LIST/?
+subtitles: OBJECT/Subtitle
