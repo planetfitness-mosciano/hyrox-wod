@@ -106,19 +106,24 @@ function getSectionFormat(s) {
   // TABATA: 20s lavoro, 10s riposo, 8 rounds
   if (wt === 20 && rt === 10 && rounds === 8) return 'TABATA';
 
-  // EMOM: ogni minuto un esercizio (workTime = 60s, nessun riposo esplicito)
+  // EMOM: ogni 60s un esercizio, nessun riposo esplicito
   if (wt === 60 && rt === 0 && rounds > 1) return 'EMOM';
 
-  // AMRAP / CIRCUIT: round singolo, nessun riposo → unico timer per tutta la sezione
+  // AMRAP: round singolo, nessun riposo → unico timer per tutta la sezione
   if (rounds === 1 && rt === 0 && wt > 0) return 'AMRAP';
 
-  // FOR TIME: round singolo con tempo massimo (workTime = cap totale)
+  // FOR TIME: round singolo senza workTime definito
   if (rounds === 1 && rt === 0 && wt === 0) return 'FOR TIME';
 
-  // INTERVAL: work + rest ben definiti
-  if (wt > 0 && rt > 0) return 'INTERVAL';
+  // INTERVAL: workTime breve (< 120s) per esercizio singolo
+  // (es. 40s lavoro · 15s riposo → ogni esercizio ha il suo countdown)
+  if (wt > 0 && wt < 120 && rt > 0) return 'INTERVAL';
 
-  // CIRCUIT con rounds multipli senza riposo
+  // CIRCUIT: workTime lungo (≥ 120s) → il timer copre un intero giro di esercizi
+  // (es. 600s lavoro · 120s riposo · 2 rounds → 10min di circuito, poi riposo)
+  if (wt >= 120 && rt > 0) return 'CIRCUIT';
+
+  // CIRCUIT multi-round senza riposo esplicito
   if (rounds > 1 && rt === 0 && wt > 0) return 'CIRCUIT';
 
   // Usa il campo format se disponibile
@@ -253,9 +258,13 @@ function buildHtml(lesson, isoDate) {
     const schema = sectionSchema(s);
 
     let groupsHtml = '';
+    // Conta zone NON vuote con showTitle → label zona solo se ce n'è più di una
+    const nonEmptyZones = s.sectionExerciseGroups.filter(g => g.showTitle && g.sectionExercises.length > 0);
+    const showZoneLabels = nonEmptyZones.length > 1;
+
     s.sectionExerciseGroups.forEach(g => {
-      // Zone label: translate "Zone" → "Zona" for Italian display
-      const zoneLbl = g.showTitle
+      // Zone label: solo se showTitle E ci sono più zone non vuote
+      const zoneLbl = (g.showTitle && showZoneLabels)
         ? `<div class="zone-label">${esc(g.name.replace(/^Zone\b/, 'Zona'))}</div>`
         : '';
 
@@ -272,8 +281,8 @@ function buildHtml(lesson, isoDate) {
           </div>`;
       });
 
-      // Non mostrare gruppi vuoti (zona senza esercizi)
-      if (rows || !g.showTitle) {
+      // Non mostrare gruppi vuoti
+      if (rows) {
         groupsHtml += `<div class="group">${zoneLbl}${rows}</div>`;
       }
     });
@@ -497,7 +506,7 @@ html,body{width:1920px;height:1080px;overflow:hidden;background:#000;color:#fff;
 /* ── RIGHT: video ── */
 .right{position:relative;overflow:hidden;background:#000;background-color:#000;-webkit-flex:1;flex:1;height:1080px;min-height:1080px}
 .right-top-bar{position:absolute;top:0;left:0;right:0;height:6px;background:#FFE500;z-index:5}
-video.ex-video{position:absolute;top:0;left:0;right:0;bottom:0;width:100%;height:100%;-o-object-fit:cover;object-fit:cover;z-index:1;background:#000}
+video.ex-video{position:absolute;top:0;left:0;right:0;bottom:0;width:100%;height:100%;-o-object-fit:contain;object-fit:contain;z-index:1;background:#000}
 .video-overlay{position:absolute;top:0;left:0;right:0;bottom:0;background:-webkit-linear-gradient(left,rgba(0,0,0,.5) 0%,transparent 55%);background:linear-gradient(to right,rgba(0,0,0,.5) 0%,transparent 55%);z-index:2;pointer-events:none}
 .loading-msg{position:absolute;top:0;left:0;right:0;bottom:0;display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;-webkit-justify-content:center;justify-content:center;font-size:22px;letter-spacing:.18em;color:rgba(255,255,255,.3);z-index:3;background:#000}
 </style>
