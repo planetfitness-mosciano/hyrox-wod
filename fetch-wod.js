@@ -272,7 +272,10 @@ function buildHtml(lesson, isoDate) {
           </div>`;
       });
 
-      groupsHtml += `<div class="group">${zoneLbl}${rows}</div>`;
+      // Non mostrare gruppi vuoti (zona senza esercizi)
+      if (rows || !g.showTitle) {
+        groupsHtml += `<div class="group">${zoneLbl}${rows}</div>`;
+      }
     });
 
     const fmt = getSectionFormat(s);
