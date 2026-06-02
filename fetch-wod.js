@@ -412,15 +412,21 @@ function buildTimerHtml(lesson, isoDate, videoField) {
     globalTotal += allEx.length;
 
     // Usa getSectionFormat (stessa logica di index.html) per rilevare il tipo
-    const fmt     = getSectionFormat(s);
-    const isAmrap = (fmt === 'AMRAP');
+    const fmt      = getSectionFormat(s);
+    const isAmrap  = (fmt === 'AMRAP');
+    const isCircuit = (fmt === 'CIRCUIT');
 
-    if (isAmrap) {
+    if (isAmrap || isCircuit) {
+      // AMRAP e CIRCUIT: unico timer a scorrimento per tutto il blocco,
+      // esercizi visualizzati in lista con video ciclico ogni 10s.
+      // CIRCUIT aggiunge round multipli e riposo tra i round.
       WORKOUT.push({
-        type: 'AMRAP',
+        type: isCircuit ? 'CIRCUIT' : 'AMRAP',
         sectionName: s.name,
         sectionSchema: schema,
         totalTime: wt,
+        restTime: rt,          // 0 per AMRAP, >0 per CIRCUIT
+        totalRounds: isCircuit ? rounds : 1,
         exercises: allEx.map(ex => ({
           name: ex.exercise.name,
           reps: getRepStr(ex),
@@ -428,6 +434,7 @@ function buildTimerHtml(lesson, isoDate, videoField) {
         }))
       });
     } else {
+      // INTERVAL: timer breve per singolo esercizio (workTime < 120s)
       const exWork = wt > 0 ? wt : Math.floor((s.duration || 40 * allEx.length) / Math.max(allEx.length, 1));
       WORKOUT.push({
         type: 'INTERVAL',
@@ -607,6 +614,11 @@ function showAmrap(block) {
   document.getElementById('amrap-badge').textContent=String(blockIdx+1).padStart(2,'0');
   document.getElementById('amrap-name').textContent=block.sectionName;
   document.getElementById('amrap-schema').textContent=block.sectionSchema;
+  // Etichetta CIRCUIT mostra anche il round corrente
+  const lbl = block.type==='CIRCUIT'
+    ? 'ROUND '+roundNum+' / '+block.totalRounds+' · TEMPO RIMASTO'
+    : 'CIRCUIT · TEMPO RIMASTO';
+  document.getElementById('amrap-label').textContent=lbl;
   const list=document.getElementById('amrap-list');
   list.innerHTML=block.exercises.map((ex,i)=>
     '<div class="amrap-ex'+(i===0?' active':'')+'" id="amr-'+i+'">'+
@@ -657,7 +669,7 @@ function initBlock() {
   const block=WORKOUT[blockIdx];
   if(!block) return;
   exIdx=0; roundNum=1; amrapCycleIdx=0;
-  if(block.type==='AMRAP') {
+  if(block.type==='AMRAP'||block.type==='CIRCUIT') {
     state='AMRAP'; secs=block.totalTime;
     showAmrap(block);
   } else {
@@ -671,14 +683,44 @@ function tick() {
   if(!block) return;
   if(secs>0) {
     secs--;
-    if(block.type==='AMRAP') updateAmrapTimer(block);
-    else updateIntervalDisplay(block);
+    if(block.type==='AMRAP'||block.type==='CIRCUIT') {
+      if(state==='AMRAP') updateAmrapTimer(block);
+      else { // CIRCUIT · RIPOSO in corso
+        document.getElementById('amrap-label').textContent='RIPOSO · ROUND '+roundNum+' / '+block.totalRounds;
+        document.getElementById('amrap-countdown').textContent=fmtTime(secs);
+      }
+    } else { updateIntervalDisplay(block); }
     return;
   }
   // Timer a zero
   if(block.type==='AMRAP') {
     blockIdx++; globalExIdx+=block.exercises.length;
     if(blockIdx<WORKOUT.length) initBlock();
+    return;
+  }
+  if(block.type==='CIRCUIT') {
+    if(state==='AMRAP') {
+      // Fine fase di lavoro
+      if(block.restTime>0 && roundNum<block.totalRounds) {
+        // Vai al riposo inter-round
+        state='REST'; secs=block.restTime;
+        document.getElementById('amrap-label').textContent='RIPOSO · ROUND '+roundNum+' / '+block.totalRounds;
+        document.getElementById('amrap-countdown').textContent=fmtTime(secs);
+        loadVideo(''); // pausa video durante riposo
+      } else if(roundNum<block.totalRounds) {
+        // Nessun riposo: prossimo round direttamente
+        roundNum++; state='AMRAP'; secs=block.totalTime; amrapCycleIdx=0;
+        showAmrap(block);
+      } else {
+        // Tutti i round completati
+        blockIdx++; globalExIdx+=block.exercises.length;
+        if(blockIdx<WORKOUT.length) initBlock();
+      }
+    } else { // state==='REST'
+      // Fine riposo → prossimo round
+      roundNum++; state='AMRAP'; secs=block.totalTime; amrapCycleIdx=0;
+      showAmrap(block);
+    }
     return;
   }
   // INTERVAL
