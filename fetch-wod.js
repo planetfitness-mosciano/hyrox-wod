@@ -415,13 +415,15 @@ function buildTimerHtml(lesson, isoDate, videoField) {
     const fmt      = getSectionFormat(s);
     const isAmrap  = (fmt === 'AMRAP');
     const isCircuit = (fmt === 'CIRCUIT');
+    const isEmom    = (fmt === 'EMOM');
+    // EMOM = CIRCUIT con finestra di 60s: esercizi ciclano ogni 10s, N round, nessun riposo esplicito
 
-    if (isAmrap || isCircuit) {
-      // AMRAP e CIRCUIT: unico timer a scorrimento per tutto il blocco,
-      // esercizi visualizzati in lista con video ciclico ogni 10s.
+    if (isAmrap || isCircuit || isEmom) {
+      // AMRAP / CIRCUIT / EMOM: unico timer a scorrimento, esercizi con video ciclico ogni 10s.
       // CIRCUIT aggiunge round multipli e riposo tra i round.
+      // EMOM: round = minuti, nessun riposo esplicito (l'atleta si riposa il tempo rimanente).
       WORKOUT.push({
-        type: isCircuit ? 'CIRCUIT' : 'AMRAP',
+        type: isEmom ? 'EMOM' : (isCircuit ? 'CIRCUIT' : 'AMRAP'),
         sectionName: s.name,
         sectionSchema: schema,
         totalTime: wt,
@@ -615,9 +617,14 @@ function showAmrap(block) {
   document.getElementById('amrap-name').textContent=block.sectionName;
   document.getElementById('amrap-schema').textContent=block.sectionSchema;
   // Etichetta CIRCUIT mostra anche il round corrente
-  const lbl = block.type==='CIRCUIT'
-    ? 'ROUND '+roundNum+' / '+block.totalRounds+' · TEMPO RIMASTO'
-    : 'AMRAP · TEMPO RIMASTO';
+  let lbl;
+  if(block.type==='EMOM') {
+    lbl = 'EMOM · MINUTO '+roundNum+' / '+block.totalRounds;
+  } else if(block.type==='CIRCUIT') {
+    lbl = 'ROUND '+roundNum+' / '+block.totalRounds+' · TEMPO RIMASTO';
+  } else {
+    lbl = 'AMRAP · TEMPO RIMASTO';
+  }
   const lblEl = document.getElementById('amrap-label');
   if(lblEl) lblEl.textContent=lbl;
   const list=document.getElementById('amrap-list');
@@ -670,7 +677,7 @@ function initBlock() {
   const block=WORKOUT[blockIdx];
   if(!block) return;
   exIdx=0; roundNum=1; amrapCycleIdx=0;
-  if(block.type==='AMRAP'||block.type==='CIRCUIT') {
+  if(block.type==='AMRAP'||block.type==='CIRCUIT'||block.type==='EMOM') {
     state='AMRAP'; secs=block.totalTime;
     showAmrap(block);
   } else {
@@ -684,10 +691,10 @@ function tick() {
   if(!block) return;
   if(secs>0) {
     secs--;
-    if(block.type==='AMRAP'||block.type==='CIRCUIT') {
+    if(block.type==='AMRAP'||block.type==='CIRCUIT'||block.type==='EMOM') {
       if(state==='AMRAP') updateAmrapTimer(block);
       else { // CIRCUIT · RIPOSO in corso
-        { const el=document.getElementById('amrap-label'); if(el) el.textContent='RIPOSO · ROUND '+roundNum+' / '+block.totalRounds; }
+        { const el=document.getElementById('amrap-label'); if(el) el.textContent=(block.type==='EMOM'?'EMOM · MINUTO':'RIPOSO · ROUND')+' '+roundNum+' / '+block.totalRounds+(block.type!=='EMOM'?' · TEMPO RIMASTO':''); }
         document.getElementById('amrap-countdown').textContent=fmtTime(secs);
       }
     } else { updateIntervalDisplay(block); }
@@ -699,13 +706,13 @@ function tick() {
     if(blockIdx<WORKOUT.length) initBlock();
     return;
   }
-  if(block.type==='CIRCUIT') {
+  if(block.type==='CIRCUIT'||block.type==='EMOM') {
     if(state==='AMRAP') {
       // Fine fase di lavoro
       if(block.restTime>0 && roundNum<block.totalRounds) {
         // Vai al riposo inter-round
         state='REST'; secs=block.restTime;
-        { const el=document.getElementById('amrap-label'); if(el) el.textContent='RIPOSO · ROUND '+roundNum+' / '+block.totalRounds; }
+        { const el=document.getElementById('amrap-label'); if(el) el.textContent=(block.type==='EMOM'?'EMOM · MINUTO':'RIPOSO · ROUND')+' '+roundNum+' / '+block.totalRounds+(block.type!=='EMOM'?' · TEMPO RIMASTO':''); }
         document.getElementById('amrap-countdown').textContent=fmtTime(secs);
         loadVideo(''); // pausa video durante riposo
       } else if(roundNum<block.totalRounds) {
