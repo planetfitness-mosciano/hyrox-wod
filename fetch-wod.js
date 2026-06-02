@@ -247,6 +247,7 @@ function buildHtml(lesson, isoDate) {
   });
 
   return `<!DOCTYPE html>
+<!-- generated:${new Date().toISOString()} -->
 <html lang="it"><head>
 <meta charset="UTF-8">
 <title>HYROX WOD</title>
@@ -350,6 +351,7 @@ function buildTimerHtml(lesson, isoDate, videoField) {
   const itemsJson  = JSON.stringify(items);
 
   return `<!DOCTYPE html>
+<!-- generated:${new Date().toISOString()} -->
 <html lang="it"><head>
 <meta charset="UTF-8">
 <title>HYROX Timer — Planet Fitness Mosciano</title>
@@ -594,7 +596,13 @@ async function getTodayLessonId(token) {
     .filter(s => s.scheduledAt.startsWith(isoDate));
 
   if (todays.length === 0) {
-    throw new Error(`Nessun WOD trovato per ${isoDate}`);
+    // Nessun WOD per oggi: usa il più recente disponibile (fallback)
+    const all = data.allLessonSchedules;
+    if (all.length === 0) throw new Error('Nessuna lezione disponibile nel calendario');
+    const fallback = all[0];
+    const fallbackDate = fallback.scheduledAt.substring(0, 10);
+    console.log(`⚠️  Nessun WOD per ${isoDate} — uso il più recente: ${fallback.lesson.name} [${fallbackDate}]`);
+    return { lessonId: fallback.lesson.id, isoDate }; // isoDate resta oggi per la data visualizzata
   }
 
   // Prefer the first result (API returns newest→oldest; within same day, order as returned)
