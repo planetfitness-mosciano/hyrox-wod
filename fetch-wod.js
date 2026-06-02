@@ -95,6 +95,38 @@ function sectionSchema(s) {
   return parts.join(' · ');
 }
 
+// ─── Section format label ─────────────────────────────────────────────────────
+// Rileva il tipo di allenamento di una sezione e restituisce un'etichetta leggibile
+
+function getSectionFormat(s) {
+  const rounds = s.rounds || 1;
+  const wt     = s.workTime  || 0;
+  const rt     = s.restTime  || 0;
+
+  // TABATA: 20s lavoro, 10s riposo, 8 rounds
+  if (wt === 20 && rt === 10 && rounds === 8) return 'TABATA';
+
+  // EMOM: ogni minuto un esercizio (workTime = 60s, nessun riposo esplicito)
+  if (wt === 60 && rt === 0 && rounds > 1) return 'EMOM';
+
+  // AMRAP / CIRCUIT: round singolo, nessun riposo → unico timer per tutta la sezione
+  if (rounds === 1 && rt === 0 && wt > 0) return 'AMRAP';
+
+  // FOR TIME: round singolo con tempo massimo (workTime = cap totale)
+  if (rounds === 1 && rt === 0 && wt === 0) return 'FOR TIME';
+
+  // INTERVAL: work + rest ben definiti
+  if (wt > 0 && rt > 0) return 'INTERVAL';
+
+  // CIRCUIT con rounds multipli senza riposo
+  if (rounds > 1 && rt === 0 && wt > 0) return 'CIRCUIT';
+
+  // Usa il campo format se disponibile
+  if (s.format && s.format !== 'UNKNOWN') return s.format;
+
+  return 'ROUNDS';
+}
+
 // ─── HTML generation ─────────────────────────────────────────────────────────
 
 const CSS = `
@@ -134,6 +166,14 @@ html,body{width:1920px;height:1080px;overflow:hidden;background:var(--bg);color:
 .section-hd{display:flex;align-items:center;gap:18px;padding:18px 26px;background:rgba(255,255,255,.05);border-bottom:1px solid var(--linehi)}
 .section-badge{font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:17px;letter-spacing:.28em;color:#000;background:var(--yellow);border-radius:3px;padding:6px 16px;text-transform:uppercase;flex-shrink:0}
 .section-name{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:30px;letter-spacing:.10em;color:#fff;text-transform:uppercase}
+.fmt-badge{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:14px;letter-spacing:.28em;border-radius:3px;padding:4px 12px;text-transform:uppercase;flex-shrink:0;border:1px solid}
+.fmt-amrap{color:#ff9500;border-color:rgba(255,149,0,.45);background:rgba(255,149,0,.10)}
+.fmt-interval{color:#00bcd4;border-color:rgba(0,188,212,.45);background:rgba(0,188,212,.10)}
+.fmt-circuit{color:#8bc34a;border-color:rgba(139,195,74,.45);background:rgba(139,195,74,.10)}
+.fmt-tabata{color:#f44336;border-color:rgba(244,67,54,.45);background:rgba(244,67,54,.10)}
+.fmt-emom{color:#9c27b0;border-color:rgba(156,39,176,.45);background:rgba(156,39,176,.10)}
+.fmt-for-time{color:#ff5722;border-color:rgba(255,87,34,.45);background:rgba(255,87,34,.10)}
+.fmt-rounds,.fmt-unknown{color:rgba(255,255,255,.5);border-color:rgba(255,255,255,.2);background:transparent}
 .section-schema{margin-left:auto;font-family:'Barlow Condensed',sans-serif;font-size:20px;letter-spacing:.06em;color:var(--yellow);flex-shrink:0;font-weight:600}
 .group{border-bottom:1px solid rgba(255,255,255,.06)}.group:last-child{border-bottom:none}
 .zone-label{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:17px;letter-spacing:.28em;color:#000;background:var(--yellow);display:inline-block;padding:5px 16px;margin:12px 22px 6px;border-radius:3px;text-transform:uppercase}
@@ -235,11 +275,13 @@ function buildHtml(lesson, isoDate) {
       groupsHtml += `<div class="group">${zoneLbl}${rows}</div>`;
     });
 
+    const fmt = getSectionFormat(s);
     sectionsHtml += `
     <div class="section">
       <div class="section-hd">
         <span class="section-badge">${badge}</span>
         <span class="section-name">${esc(s.name)}</span>
+        <span class="fmt-badge fmt-${fmt.toLowerCase().replace(/\s/g,'-')}">${esc(fmt)}</span>
         <span class="section-schema">${esc(schema)}</span>
       </div>
       <div class="ex-list">${groupsHtml}</div>
@@ -357,9 +399,9 @@ function buildTimerHtml(lesson, isoDate, videoField) {
 
     globalTotal += allEx.length;
 
-    // AMRAP: rounds=1, restTime=0, workTime = durata totale sezione
-    // INTERVAL: tutto il resto (work/rest per esercizio)
-    const isAmrap = (rounds === 1 && rt === 0 && wt > 0);
+    // Usa getSectionFormat (stessa logica di index.html) per rilevare il tipo
+    const fmt     = getSectionFormat(s);
+    const isAmrap = (fmt === 'AMRAP');
 
     if (isAmrap) {
       WORKOUT.push({
@@ -567,7 +609,7 @@ function updateAmrapTimer(block) {
   document.getElementById('amrap-countdown').textContent=fmtTime(secs);
   // Cicla esercizi evidenziati in base al tempo trascorso
   const elapsed = block.totalTime - secs;
-  const cycleLen = Math.max(8, Math.floor(block.totalTime / block.exercises.length));
+  const cycleLen = 10; // 10 secondi per video — abbastanza per capire l'esercizio
   const newIdx = Math.floor(elapsed / cycleLen) % block.exercises.length;
   if (newIdx !== amrapCycleIdx) {
     const oldEl=document.getElementById('amr-'+amrapCycleIdx);
