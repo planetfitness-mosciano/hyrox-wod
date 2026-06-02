@@ -103,31 +103,49 @@ function getSectionFormat(s) {
   const wt     = s.workTime  || 0;
   const rt     = s.restTime  || 0;
 
+  // ── Fonte primaria: campo format restituito dall'API ────────────────────────
+  if (s.format && s.format !== 'UNKNOWN' && s.format !== '') {
+    const f = s.format.toUpperCase().replace(/_/g, '').replace(/\s/g, '');
+    if (f === 'AMRAP')              return 'AMRAP';
+    if (f === 'TABATA')             return 'TABATA';
+    if (f === 'FORTIME')            return 'FOR TIME';
+    if (f === 'EMOM')               return 'EMOM';
+    if (f === 'INTERVAL')           return 'INTERVAL';
+    if (f === 'CIRCUIT')            return 'CIRCUIT';
+    if (f === 'E2M'||f==='E2MOM')   return 'E2MOM';
+    if (f === 'E3M'||f==='E3MOM')   return 'E3MOM';
+    if (f === 'EVERYM')             return 'EMOM';
+    // Formato sconosciuto: logga e continua con euristica
+    console.log('Formato API non riconosciuto:', s.format, '— uso euristica');
+  }
+
+  // ── Euristiche fallback ─────────────────────────────────────────────────────
+
   // TABATA: 20s lavoro, 10s riposo, 8 rounds
   if (wt === 20 && rt === 10 && rounds === 8) return 'TABATA';
 
-  // EMOM: ogni 60s un esercizio, nessun riposo esplicito
-  if (wt === 60 && rt === 0 && rounds > 1) return 'EMOM';
+  // EMOM generalizzato: finestre multiple di 60s (60/120/180s), nessun riposo, più round
+  // Es. E2MOM = 120s, E3MOM = 180s
+  if (wt > 0 && wt % 60 === 0 && rt === 0 && rounds > 1) {
+    const mins = wt / 60;
+    if (mins === 1) return 'EMOM';
+    return 'E' + mins + 'MOM';
+  }
 
-  // AMRAP: round singolo, nessun riposo → unico timer per tutta la sezione
-  if (rounds === 1 && rt === 0 && wt > 0) return 'AMRAP';
-
-  // FOR TIME: round singolo senza workTime definito
+  // FOR TIME: round singolo, nessun workTime (o workTime = time cap)
   if (rounds === 1 && rt === 0 && wt === 0) return 'FOR TIME';
 
-  // INTERVAL: workTime breve (< 120s) per esercizio singolo
-  // (es. 40s lavoro · 15s riposo → ogni esercizio ha il suo countdown)
+  // AMRAP: round singolo, nessun riposo, workTime = durata totale
+  if (rounds === 1 && rt === 0 && wt > 0) return 'AMRAP';
+
+  // INTERVAL: workTime breve per esercizio singolo (< 120s)
   if (wt > 0 && wt < 120 && rt > 0) return 'INTERVAL';
 
-  // CIRCUIT: workTime lungo (≥ 120s) → il timer copre un intero giro di esercizi
-  // (es. 600s lavoro · 120s riposo · 2 rounds → 10min di circuito, poi riposo)
+  // CIRCUIT: workTime lungo (≥ 120s) — un giro di esercizi con riposo inter-round
   if (wt >= 120 && rt > 0) return 'CIRCUIT';
 
-  // CIRCUIT multi-round senza riposo esplicito
+  // CIRCUIT multi-round senza riposo
   if (rounds > 1 && rt === 0 && wt > 0) return 'CIRCUIT';
-
-  // Usa il campo format se disponibile
-  if (s.format && s.format !== 'UNKNOWN') return s.format;
 
   return 'ROUNDS';
 }
@@ -179,6 +197,7 @@ html,body{width:1920px;height:1080px;overflow:hidden;background:var(--bg);color:
 .fmt-emom{color:#9c27b0;border-color:rgba(156,39,176,.45);background:rgba(156,39,176,.10)}
 .fmt-for-time{color:#ff5722;border-color:rgba(255,87,34,.45);background:rgba(255,87,34,.10)}
 .fmt-rounds,.fmt-unknown{color:rgba(255,255,255,.5);border-color:rgba(255,255,255,.2);background:transparent}
+.fmt-e2mom,.fmt-e3mom{color:#9c27b0;border-color:rgba(156,39,176,.45);background:rgba(156,39,176,.10)}
 .section-schema{margin-left:auto;font-family:'Barlow Condensed',sans-serif;font-size:20px;letter-spacing:.06em;color:var(--yellow);flex-shrink:0;font-weight:600}
 .group{border-bottom:1px solid rgba(255,255,255,.06)}.group:last-child{border-bottom:none}
 .zone-label{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:17px;letter-spacing:.28em;color:#000;background:var(--yellow);display:inline-block;padding:5px 16px;margin:12px 22px 6px;border-radius:3px;text-transform:uppercase}
@@ -412,23 +431,53 @@ function buildTimerHtml(lesson, isoDate, videoField) {
     globalTotal += allEx.length;
 
     // Usa getSectionFormat (stessa logica di index.html) per rilevare il tipo
-    const fmt      = getSectionFormat(s);
-    const isAmrap  = (fmt === 'AMRAP');
+    const fmt       = getSectionFormat(s);
+    const isAmrap   = (fmt === 'AMRAP');
     const isCircuit = (fmt === 'CIRCUIT');
-    const isEmom    = (fmt === 'EMOM');
-    // EMOM = CIRCUIT con finestra di 60s: esercizi ciclano ogni 10s, N round, nessun riposo esplicito
+    const isEmom    = fmt.endsWith('MOM') || fmt === 'EMOM'; // EMOM, E2MOM, E3MOM…
+    const isTabata  = (fmt === 'TABATA');
+    const isForTime = (fmt === 'FOR TIME');
 
     if (isAmrap || isCircuit || isEmom) {
-      // AMRAP / CIRCUIT / EMOM: unico timer a scorrimento, esercizi con video ciclico ogni 10s.
-      // CIRCUIT aggiunge round multipli e riposo tra i round.
-      // EMOM: round = minuti, nessun riposo esplicito (l'atleta si riposa il tempo rimanente).
+      // AMRAP / CIRCUIT / EMOM: unico timer, esercizi con video ciclico ogni 10s.
       WORKOUT.push({
         type: isEmom ? 'EMOM' : (isCircuit ? 'CIRCUIT' : 'AMRAP'),
+        fmt,
         sectionName: s.name,
         sectionSchema: schema,
         totalTime: wt,
-        restTime: rt,          // 0 per AMRAP, >0 per CIRCUIT
-        totalRounds: isCircuit ? rounds : 1,
+        restTime: rt,
+        totalRounds: (isCircuit || isEmom) ? rounds : 1,
+        exercises: allEx.map(ex => ({
+          name: ex.exercise.name,
+          reps: getRepStr(ex),
+          videoUrl: getVid(ex)
+        }))
+      });
+    } else if (isTabata) {
+      // TABATA: ogni esercizio × roundsPerExercise (es. 8×20s/10s), poi esercizio successivo
+      WORKOUT.push({
+        type: 'TABATA',
+        fmt,
+        sectionName: s.name,
+        sectionSchema: schema,
+        workTime: wt || 20,
+        restTime: rt || 10,
+        roundsPerExercise: rounds || 8,
+        exercises: allEx.map(ex => ({
+          name: ex.exercise.name,
+          rpe: ex.rpe || null,
+          videoUrl: getVid(ex)
+        }))
+      });
+    } else if (isForTime) {
+      // FOR TIME: lista esercizi in sequenza, timer conta il tempo trascorso (o verso il cap)
+      WORKOUT.push({
+        type: 'FOR_TIME',
+        fmt,
+        sectionName: s.name,
+        sectionSchema: schema,
+        timeCap: wt,  // 0 = nessun cap (conta in su)
         exercises: allEx.map(ex => ({
           name: ex.exercise.name,
           reps: getRepStr(ex),
@@ -440,6 +489,7 @@ function buildTimerHtml(lesson, isoDate, videoField) {
       const exWork = wt > 0 ? wt : Math.floor((s.duration || 40 * allEx.length) / Math.max(allEx.length, 1));
       WORKOUT.push({
         type: 'INTERVAL',
+        fmt,
         sectionName: s.name,
         sectionSchema: schema,
         workTime: exWork,
@@ -584,6 +634,7 @@ video.ex-video{position:absolute;top:0;left:0;right:0;bottom:0;width:100%;height
 const WORKOUT = ${workoutJson};
 let blockIdx = 0, state = 'INIT', secs = 0;
 let exIdx = 0, roundNum = 1, amrapCycleIdx = 0;
+let exerciseRound = 1;  // per TABATA: round corrente sull'esercizio attuale
 
 // Lista flat di tutti gli esercizi unici per contatore X/Y
 const globalFlat = [];
@@ -619,9 +670,11 @@ function showAmrap(block) {
   // Etichetta CIRCUIT mostra anche il round corrente
   let lbl;
   if(block.type==='EMOM') {
-    lbl = 'EMOM · MINUTO '+roundNum+' / '+block.totalRounds;
+    lbl = (block.fmt||'EMOM')+' · MINUTO '+roundNum+' / '+block.totalRounds;
   } else if(block.type==='CIRCUIT') {
     lbl = 'ROUND '+roundNum+' / '+block.totalRounds+' · TEMPO RIMASTO';
+  } else if(block.type==='FOR_TIME') {
+    lbl = block.timeCap>0 ? 'FOR TIME · LIMITE '+fmtTime(block.timeCap) : 'FOR TIME · TEMPO TRASCORSO';
   } else {
     lbl = 'AMRAP · TEMPO RIMASTO';
   }
@@ -669,17 +722,30 @@ function updateIntervalDisplay(block) {
   document.getElementById('int-exname').textContent=ex.name.toUpperCase();
   document.getElementById('int-label').textContent=state==='WORK'?'LAVORO':'RIPOSO';
   document.getElementById('int-timer').textContent=fmtTime(secs);
-  document.getElementById('int-round').textContent='ROUND '+roundNum+' / '+block.totalRounds;
+  document.getElementById('int-round').textContent = block.type==='TABATA'
+    ? 'ROUND '+exerciseRound+' / '+block.roundsPerExercise
+    : 'ROUND '+roundNum+' / '+block.totalRounds;
   if(state==='WORK' && ex.videoUrl) loadVideo(ex.videoUrl);
 }
 
 function initBlock() {
   const block=WORKOUT[blockIdx];
   if(!block) return;
-  exIdx=0; roundNum=1; amrapCycleIdx=0;
+  exIdx=0; roundNum=1; amrapCycleIdx=0; exerciseRound=1;
   if(block.type==='AMRAP'||block.type==='CIRCUIT'||block.type==='EMOM') {
     state='AMRAP'; secs=block.totalTime;
     showAmrap(block);
+  } else if(block.type==='FOR_TIME') {
+    // FOR TIME: conta in su (0→∞) o in giù dal timeCap
+    state='AMRAP';
+    secs = block.timeCap > 0 ? block.timeCap : 0;
+    showAmrap(block);
+  } else if(block.type==='TABATA') {
+    state='WORK'; secs=block.workTime;
+    showInterval(block);
+    // Label specifico TABATA
+    const il=document.getElementById('int-label'); if(il) il.textContent='TABATA';
+    const ir=document.getElementById('int-round'); if(ir) ir.textContent='ROUND 1 / '+block.roundsPerExercise;
   } else {
     state='WORK'; secs=block.workTime;
     showInterval(block);
@@ -689,16 +755,20 @@ function initBlock() {
 function tick() {
   const block=WORKOUT[blockIdx];
   if(!block) return;
-  if(secs>0) {
-    secs--;
-    if(block.type==='AMRAP'||block.type==='CIRCUIT'||block.type==='EMOM') {
+  if(secs>0 || block.type==='FOR_TIME') {
+    // FOR TIME senza cap: conta in su (secs parte da 0 e sale)
+    if(block.type==='FOR_TIME' && block.timeCap===0) { secs++; updateAmrapTimer(block); return; }
+    if(secs<=0) { /* FOR TIME con cap arriva qui alla fine */ }
+    else secs--;
+    if(block.type==='AMRAP'||block.type==='CIRCUIT'||block.type==='EMOM'||block.type==='FOR_TIME') {
       if(state==='AMRAP') updateAmrapTimer(block);
-      else { // CIRCUIT · RIPOSO in corso
-        { const el=document.getElementById('amrap-label'); if(el) el.textContent=(block.type==='EMOM'?'EMOM · MINUTO':'RIPOSO · ROUND')+' '+roundNum+' / '+block.totalRounds+(block.type!=='EMOM'?' · TEMPO RIMASTO':''); }
+      else { // CIRCUIT/EMOM · RIPOSO
+        { const el=document.getElementById('amrap-label'); if(el) el.textContent=(block.type==='EMOM'?((block.fmt||'EMOM')+' · MINUTO'):'RIPOSO · ROUND')+' '+roundNum+' / '+block.totalRounds+(block.type!=='EMOM'?' · TEMPO RIMASTO':''); }
         document.getElementById('amrap-countdown').textContent=fmtTime(secs);
       }
-    } else { updateIntervalDisplay(block); }
-    return;
+    } else if(block.type==='TABATA') { updateIntervalDisplay(block); }
+    else { updateIntervalDisplay(block); }
+    if(secs>0 || (block.type==='FOR_TIME'&&block.timeCap===0)) return;
   }
   // Timer a zero
   if(block.type==='AMRAP') {
@@ -728,6 +798,29 @@ function tick() {
       // Fine riposo → prossimo round
       roundNum++; state='AMRAP'; secs=block.totalTime; amrapCycleIdx=0;
       showAmrap(block);
+    }
+    return;
+  }
+  // TABATA: logica separata (exerciseRound × roundsPerExercise, poi esercizio successivo)
+  if(block.type==='TABATA') {
+    if(state==='WORK') {
+      state='REST'; secs=block.restTime;
+      const il=document.getElementById('int-label'); if(il) il.textContent='RIPOSO';
+      document.getElementById('int-timer').textContent=fmtTime(secs);
+    } else { // REST finito
+      exerciseRound++;
+      if(exerciseRound>block.roundsPerExercise) {
+        // Prossimo esercizio
+        exerciseRound=1; exIdx++; globalExIdx++;
+        if(exIdx>=block.exercises.length) {
+          blockIdx++; if(blockIdx<WORKOUT.length) initBlock(); return;
+        }
+      }
+      state='WORK'; secs=block.workTime;
+      showInterval(block);
+      const il=document.getElementById('int-label'); if(il) il.textContent='TABATA';
+      const ir=document.getElementById('int-round'); if(ir) ir.textContent='ROUND '+exerciseRound+' / '+block.roundsPerExercise;
+      loadVideo(block.exercises[exIdx].videoUrl);
     }
     return;
   }
