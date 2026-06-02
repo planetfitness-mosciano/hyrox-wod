@@ -538,7 +538,7 @@ video.ex-video{position:absolute;top:0;left:0;right:0;bottom:0;width:100%;height
         </div>
       </div>
       <div class="amrap-inner">
-        <div class="amrap-label">CIRCUIT · TEMPO RIMASTO</div>
+        <div class="amrap-label" id="amrap-label">—</div>
         <div class="amrap-countdown" id="amrap-countdown">0:00</div>
         <div class="amrap-list" id="amrap-list"></div>
       </div>
@@ -617,8 +617,9 @@ function showAmrap(block) {
   // Etichetta CIRCUIT mostra anche il round corrente
   const lbl = block.type==='CIRCUIT'
     ? 'ROUND '+roundNum+' / '+block.totalRounds+' · TEMPO RIMASTO'
-    : 'CIRCUIT · TEMPO RIMASTO';
-  document.getElementById('amrap-label').textContent=lbl;
+    : 'AMRAP · TEMPO RIMASTO';
+  const lblEl = document.getElementById('amrap-label');
+  if(lblEl) lblEl.textContent=lbl;
   const list=document.getElementById('amrap-list');
   list.innerHTML=block.exercises.map((ex,i)=>
     '<div class="amrap-ex'+(i===0?' active':'')+'" id="amr-'+i+'">'+
@@ -686,7 +687,7 @@ function tick() {
     if(block.type==='AMRAP'||block.type==='CIRCUIT') {
       if(state==='AMRAP') updateAmrapTimer(block);
       else { // CIRCUIT · RIPOSO in corso
-        document.getElementById('amrap-label').textContent='RIPOSO · ROUND '+roundNum+' / '+block.totalRounds;
+        { const el=document.getElementById('amrap-label'); if(el) el.textContent='RIPOSO · ROUND '+roundNum+' / '+block.totalRounds; }
         document.getElementById('amrap-countdown').textContent=fmtTime(secs);
       }
     } else { updateIntervalDisplay(block); }
@@ -704,7 +705,7 @@ function tick() {
       if(block.restTime>0 && roundNum<block.totalRounds) {
         // Vai al riposo inter-round
         state='REST'; secs=block.restTime;
-        document.getElementById('amrap-label').textContent='RIPOSO · ROUND '+roundNum+' / '+block.totalRounds;
+        { const el=document.getElementById('amrap-label'); if(el) el.textContent='RIPOSO · ROUND '+roundNum+' / '+block.totalRounds; }
         document.getElementById('amrap-countdown').textContent=fmtTime(secs);
         loadVideo(''); // pausa video durante riposo
       } else if(roundNum<block.totalRounds) {
