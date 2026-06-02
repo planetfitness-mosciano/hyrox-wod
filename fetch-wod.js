@@ -311,97 +311,151 @@ setTimeout(()=>location.reload(), 60*60*1000);
 
 // ─── Timer HTML generation ────────────────────────────────────────────────────
 
+// ─── Helper: stringa reps da detailedMetrics (per display AMRAP) ─────────────
+function getRepStr(ex) {
+  const r = ex.detailedMetrics.repetitions;
+  const d = ex.detailedMetrics.distance;
+  if (r.single != null) {
+    if (r.single === -1) return 'AMRAP';
+    if (r.single > 0)    return r.single + ' reps';
+  }
+  if (r.min != null && r.min > 0) {
+    if (r.max && r.max > 0 && r.max !== r.min) return r.min + '–' + r.max + ' reps';
+    return r.min + ' reps';
+  }
+  if (d.single != null && d.single > 0) return d.single + 'm';
+  const dur = fmtSecs(ex.duration);
+  if (dur) return dur;
+  return '—';
+}
+
+// ─── Timer HTML generation ────────────────────────────────────────────────────
 function buildTimerHtml(lesson, isoDate, videoField) {
   const dateStr = italianDate(isoDate);
 
-  // Flatten: esercizi UNICI (rounds gestiti dal timer JS)
-  const items = [];
-  for (const s of lesson.sections) {
-    const schema  = sectionSchema(s);
-    const rounds  = s.rounds || 1;
-    const wt      = (s.workTime  > 0) ? s.workTime  : 0;
-    const rt      = (s.restTime  > 0) ? s.restTime  : 0;
+  function getVid(ex) {
+    if (!videoField || !ex.exercise[videoField.name]) return '';
+    const v = ex.exercise[videoField.name];
+    const k = videoField.videoSubField || 'url';
+    return (typeof v === 'string') ? v : (v?.[k] || '');
+  }
 
-    for (const g of s.sectionExerciseGroups) {
-      for (const ex of g.sectionExercises) {
-        // Estrai URL video
-        let videoUrl = '';
-        if (videoField && ex.exercise[videoField.name]) {
-          const v      = ex.exercise[videoField.name];
-          const subKey = videoField.videoSubField || 'url';
-          videoUrl = (typeof v === 'string') ? v : (v?.[subKey] || '');
-        }
-        const exWork = wt > 0 ? wt : (ex.duration || 40);
-        items.push({
+  // ── Costruisci WORKOUT: blocchi AMRAP o INTERVAL ──────────────────────────
+  const WORKOUT = [];
+  let globalTotal = 0; // totale esercizi unici per X/Y
+
+  for (const s of lesson.sections) {
+    const schema = sectionSchema(s);
+    const rounds = s.rounds || 1;
+    const wt     = (s.workTime > 0) ? s.workTime : 0;
+    const rt     = (s.restTime > 0) ? s.restTime : 0;
+
+    const allEx = [];
+    for (const g of s.sectionExerciseGroups)
+      for (const ex of g.sectionExercises)
+        allEx.push(ex);
+
+    globalTotal += allEx.length;
+
+    // AMRAP: rounds=1, restTime=0, workTime = durata totale sezione
+    // INTERVAL: tutto il resto (work/rest per esercizio)
+    const isAmrap = (rounds === 1 && rt === 0 && wt > 0);
+
+    if (isAmrap) {
+      WORKOUT.push({
+        type: 'AMRAP',
+        sectionName: s.name,
+        sectionSchema: schema,
+        totalTime: wt,
+        exercises: allEx.map(ex => ({
           name: ex.exercise.name,
-          sectionName: s.name,
-          sectionSchema: schema,
-          workTime: exWork,
-          restTime: rt,
-          totalRounds: rounds,
+          reps: getRepStr(ex),
+          videoUrl: getVid(ex)
+        }))
+      });
+    } else {
+      const exWork = wt > 0 ? wt : Math.floor((s.duration || 40 * allEx.length) / Math.max(allEx.length, 1));
+      WORKOUT.push({
+        type: 'INTERVAL',
+        sectionName: s.name,
+        sectionSchema: schema,
+        workTime: exWork,
+        restTime: rt,
+        totalRounds: rounds,
+        exercises: allEx.map(ex => ({
+          name: ex.exercise.name,
           rpe: ex.rpe || null,
-          videoUrl,
-          durStr: fmtSecs(exWork) || '—'
-        });
-      }
+          videoUrl: getVid(ex)
+        }))
+      });
     }
   }
 
-  const total      = items.length;
-  const itemsJson  = JSON.stringify(items);
+  const workoutJson  = JSON.stringify(WORKOUT);
+  const globalTotStr = String(globalTotal);
 
   return `<!DOCTYPE html>
 <!-- generated:${new Date().toISOString()} -->
 <html lang="it"><head>
 <meta charset="UTF-8">
 <title>HYROX Timer — Planet Fitness Mosciano</title>
-<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;400;600;700;800;900&family=Barlow:wght@300;400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;400;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.5.15/hls.min.js"></script>
 <style>
-/* Colori come valori diretti per max compatibilità Android WebView */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{width:1920px;height:1080px;overflow:hidden;background:#000;color:#fff;font-family:'Barlow Condensed',sans-serif}
-/* Flexbox invece di grid per max compatibilità */
 .screen{width:1920px;height:1080px;display:-webkit-flex;display:flex;-webkit-flex-direction:row;flex-direction:row;overflow:hidden}
 
 /* ── LEFT 520px ── */
-.left{width:520px;min-width:520px;max-width:520px;background:#0d0d0d;border-right:2px solid rgba(255,255,255,.18);display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;padding:0;height:1080px}
+.left{width:520px;min-width:520px;background:#0d0d0d;border-right:2px solid rgba(255,255,255,.18);display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;height:1080px}
 .left-top-bar{height:6px;background:#FFE500;-webkit-flex-shrink:0;flex-shrink:0}
-.logo-block{background:#000;border-bottom:1px solid rgba(255,255,255,.18);padding:26px 36px 22px;display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column}
-.hyrox-wrap{margin-bottom:14px}.hyrox-img{width:100%;height:auto;display:block}
-.logo-divider{height:1px;background:rgba(255,255,255,.18);margin-bottom:14px}
-.pf-wrap{}.pf-img{width:100%;height:auto;display:block;-webkit-filter:invert(1);filter:invert(1)}
-.left-body{-webkit-flex:1;flex:1;display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;padding:32px 40px 0;overflow:hidden}
+.logo-block{background:#000;border-bottom:1px solid rgba(255,255,255,.18);padding:22px 36px 18px;display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column}
+.hyrox-wrap{margin-bottom:12px}.hyrox-img{width:100%;height:auto;display:block}
+.logo-divider{height:1px;background:rgba(255,255,255,.18);margin-bottom:12px}
+.pf-img{width:100%;height:auto;display:block;-webkit-filter:invert(1);filter:invert(1)}
 
-/* Sezione */
-.section-badge{display:inline-block;-webkit-align-self:flex-start;align-self:flex-start;font-weight:900;font-size:16px;letter-spacing:.28em;color:#000;background:#FFE500;border-radius:3px;padding:5px 14px;text-transform:uppercase;margin-bottom:10px}
-.section-name{font-weight:800;font-size:28px;letter-spacing:.10em;color:#fff;text-transform:uppercase;margin-bottom:4px}
-.section-schema{font-size:20px;letter-spacing:.06em;color:#FFE500;font-weight:600;margin-bottom:24px}
+/* ── SEZIONE header (comune) ── */
+.section-row{display:-webkit-flex;display:flex;-webkit-align-items:flex-start;align-items:flex-start;gap:12px;padding:20px 36px 0;-webkit-flex-shrink:0;flex-shrink:0}
+.section-badge{display:inline-block;font-weight:900;font-size:15px;letter-spacing:.28em;color:#000;background:#FFE500;border-radius:3px;padding:4px 12px;text-transform:uppercase;-webkit-flex-shrink:0;flex-shrink:0;margin-top:2px}
+.section-title{display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;gap:3px}
+.section-name{font-weight:800;font-size:26px;letter-spacing:.10em;color:#fff;text-transform:uppercase}
+.section-schema{font-size:16px;letter-spacing:.05em;color:#FFE500;font-weight:600}
 
-/* Esercizio */
-.ex-name{font-weight:900;font-size:108px;line-height:.88;letter-spacing:-.02em;text-transform:uppercase;color:#fff;margin-bottom:0;overflow:hidden}
-.ex-spacer{-webkit-flex:1;flex:1;min-height:16px}
-.ex-pos{font-weight:300;font-size:28px;letter-spacing:.18em;color:rgba(255,255,255,.75);margin-bottom:8px}
-.ex-rpe{font-size:18px;letter-spacing:.12em;color:rgba(255,229,0,.75);margin-bottom:20px}
+/* ── AMRAP mode ── */
+#ui-amrap{display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;-webkit-flex:1;flex:1;overflow:hidden}
+.amrap-inner{display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;-webkit-flex:1;flex:1;padding:16px 36px 0}
+.amrap-label{font-weight:900;font-size:20px;letter-spacing:.40em;color:rgba(255,229,0,.6);text-transform:uppercase;margin-bottom:4px}
+.amrap-countdown{font-weight:200;font-size:100px;letter-spacing:.03em;color:#fff;line-height:1;margin-bottom:16px}
+.amrap-list{display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;gap:0;-webkit-flex:1;flex:1;overflow:hidden}
+.amrap-ex{display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;-webkit-justify-content:space-between;justify-content:space-between;padding:10px 14px;border-bottom:1px solid rgba(255,255,255,.08);-webkit-transition:all .3s;transition:all .3s;border-radius:4px}
+.amrap-ex.active{background:rgba(255,229,0,.12);border-color:rgba(255,229,0,.35)}
+.amrap-ex-name{font-weight:700;font-size:24px;letter-spacing:.05em;text-transform:uppercase;color:rgba(255,255,255,.75)}
+.amrap-ex.active .amrap-ex-name{color:#fff;font-size:27px}
+.amrap-ex-reps{font-weight:900;font-size:24px;color:#FFE500;letter-spacing:.05em;-webkit-flex-shrink:0;flex-shrink:0}
+.amrap-ex.active .amrap-ex-reps{font-size:27px}
 
-/* Timer */
-.timer-block{display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;gap:2px;padding-bottom:12px}
-.work-label{font-weight:900;font-size:48px;letter-spacing:.30em;color:#FFE500;text-transform:uppercase;line-height:1;margin-bottom:6px}
-.timer-display{font-weight:200;font-size:128px;letter-spacing:.03em;color:#fff;line-height:1}
-.round-label{font-weight:600;font-size:32px;letter-spacing:.22em;color:rgba(255,255,255,.75);text-transform:uppercase;margin-top:6px}
-.loc-badge{font-weight:700;font-size:18px;letter-spacing:.18em;color:#000;background:#FFE500;border-radius:4px;padding:6px 18px;text-transform:uppercase;-webkit-align-self:flex-start;align-self:flex-start;margin-bottom:12px}
+/* ── INTERVAL mode ── */
+#ui-interval{display:none;-webkit-flex-direction:column;flex-direction:column;-webkit-flex:1;flex:1}
+.int-inner{display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;-webkit-flex:1;flex:1;padding:12px 36px 0;overflow:hidden}
+.int-pos{font-weight:300;font-size:24px;letter-spacing:.18em;color:rgba(255,255,255,.6);margin-bottom:6px}
+.int-exname{font-weight:900;font-size:92px;line-height:.88;letter-spacing:-.02em;text-transform:uppercase;color:#fff;overflow:hidden;-webkit-flex:1;flex:1;display:-webkit-flex;display:flex;-webkit-align-items:flex-end;align-items:flex-end;padding-bottom:12px}
+.int-timer-block{display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;gap:4px;padding-bottom:10px}
+.int-label{font-weight:900;font-size:46px;letter-spacing:.30em;color:#FFE500;text-transform:uppercase;line-height:1}
+.int-timer{font-weight:200;font-size:124px;letter-spacing:.03em;color:#fff;line-height:1}
+.int-round{font-weight:600;font-size:30px;letter-spacing:.22em;color:rgba(255,255,255,.65);text-transform:uppercase;margin-top:4px}
 
-/* Bottom bar */
-.date-row{font-size:19px;letter-spacing:.18em;color:rgba(255,255,255,.85);text-transform:uppercase;padding:16px 40px 22px;border-top:1px solid rgba(255,255,255,.18);display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;gap:16px;-webkit-flex-shrink:0;flex-shrink:0}
+/* ── Bottom bar (comune) ── */
+.loc-badge{font-weight:700;font-size:16px;letter-spacing:.18em;color:#000;background:#FFE500;border-radius:4px;padding:5px 16px;text-transform:uppercase;-webkit-align-self:flex-start;align-self:flex-start;margin:8px 36px}
+.date-row{font-size:17px;letter-spacing:.18em;color:rgba(255,255,255,.85);text-transform:uppercase;padding:12px 36px 18px;border-top:1px solid rgba(255,255,255,.18);display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;gap:14px;-webkit-flex-shrink:0;flex-shrink:0}
 .clock-inline{font-weight:600;letter-spacing:.15em;color:#fff;-webkit-flex-shrink:0;flex-shrink:0}
 
-/* ── RIGHT: video (1400px) ── */
+/* ── RIGHT: video ── */
 .right{position:relative;overflow:hidden;background:#000;background-color:#000;-webkit-flex:1;flex:1;height:1080px;min-height:1080px}
 .right-top-bar{position:absolute;top:0;left:0;right:0;height:6px;background:#FFE500;z-index:5}
 video.ex-video{position:absolute;top:0;left:0;right:0;bottom:0;width:100%;height:100%;-o-object-fit:cover;object-fit:cover;z-index:1;background:#000}
-.video-overlay{position:absolute;top:0;left:0;right:0;bottom:0;background:-webkit-linear-gradient(left,rgba(0,0,0,.45) 0%,transparent 60%);background:linear-gradient(to right,rgba(0,0,0,.45) 0%,transparent 60%);z-index:2;pointer-events:none}
-.loading-msg{position:absolute;top:0;left:0;right:0;bottom:0;display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;-webkit-justify-content:center;justify-content:center;font-size:24px;letter-spacing:.18em;color:rgba(255,255,255,.35);z-index:3;background:#000}
+.video-overlay{position:absolute;top:0;left:0;right:0;bottom:0;background:-webkit-linear-gradient(left,rgba(0,0,0,.5) 0%,transparent 55%);background:linear-gradient(to right,rgba(0,0,0,.5) 0%,transparent 55%);z-index:2;pointer-events:none}
+.loading-msg{position:absolute;top:0;left:0;right:0;bottom:0;display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;-webkit-justify-content:center;justify-content:center;font-size:22px;letter-spacing:.18em;color:rgba(255,255,255,.3);z-index:3;background:#000}
 </style>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.5.15/hls.min.js"></script>
 </head>
 <body>
 <div class="screen">
@@ -410,28 +464,52 @@ video.ex-video{position:absolute;top:0;left:0;right:0;bottom:0;width:100%;height
     <div class="logo-block">
       <div class="hyrox-wrap"><img class="hyrox-img" src="data:image/png;base64,${HYROX_LOGO_B64}" alt="HYROX × PUMA"></div>
       <div class="logo-divider"></div>
-      <div class="pf-wrap"><img class="pf-img" src="data:image/png;base64,${PF_LOGO_B64}" alt="Planet Fitness"></div>
+      <img class="pf-img" src="data:image/png;base64,${PF_LOGO_B64}" alt="Planet Fitness">
     </div>
-    <div class="left-body">
-      <div class="section-badge" id="section-badge">01</div>
-      <div class="section-name" id="section-name">—</div>
-      <div class="section-schema" id="section-schema">—</div>
-      <div class="ex-pos" id="ex-pos">1 / ${total}</div>
-      <div class="ex-name" id="ex-name">—</div>
-      <div class="ex-rpe" id="ex-rpe"></div>
-      <div class="ex-spacer"></div>
-      <div class="timer-block">
-        <span class="work-label" id="work-label">LAVORO</span>
-        <div class="timer-display" id="timer">00:00</div>
-        <span class="round-label" id="round-label">ROUND 1</span>
+
+    <!-- AMRAP mode -->
+    <div id="ui-amrap">
+      <div class="section-row">
+        <span class="section-badge" id="amrap-badge">01</span>
+        <div class="section-title">
+          <span class="section-name" id="amrap-name">—</span>
+          <span class="section-schema" id="amrap-schema">—</span>
+        </div>
       </div>
-      <div class="loc-badge">Mosciano Sant'Angelo</div>
+      <div class="amrap-inner">
+        <div class="amrap-label">CIRCUIT · TEMPO RIMASTO</div>
+        <div class="amrap-countdown" id="amrap-countdown">0:00</div>
+        <div class="amrap-list" id="amrap-list"></div>
+      </div>
     </div>
+
+    <!-- INTERVAL mode -->
+    <div id="ui-interval">
+      <div class="section-row">
+        <span class="section-badge" id="int-badge">01</span>
+        <div class="section-title">
+          <span class="section-name" id="int-name">—</span>
+          <span class="section-schema" id="int-schema">—</span>
+        </div>
+      </div>
+      <div class="int-inner">
+        <div class="int-pos" id="int-pos">1 / ${globalTotStr}</div>
+        <div class="int-exname" id="int-exname">—</div>
+        <div class="int-timer-block">
+          <span class="int-label" id="int-label">LAVORO</span>
+          <div class="int-timer" id="int-timer">00:00</div>
+          <span class="int-round" id="int-round">ROUND 1</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="loc-badge">Mosciano Sant'Angelo</div>
     <div class="date-row">
       <span id="clock" class="clock-inline"></span>
       ${esc(dateStr)}
     </div>
   </div>
+
   <div class="right">
     <div class="right-top-bar"></div>
     <div class="loading-msg" id="loading-msg">Caricamento video...</div>
@@ -440,111 +518,144 @@ video.ex-video{position:absolute;top:0;left:0;right:0;bottom:0;width:100%;height
   </div>
 </div>
 <script>
-const EXERCISES = ${itemsJson};
-let idx = 0, isWork = true, secs = EXERCISES.length ? EXERCISES[0].workTime : 0;
+const WORKOUT = ${workoutJson};
+let blockIdx = 0, state = 'INIT', secs = 0;
+let exIdx = 0, roundNum = 1, amrapCycleIdx = 0;
+
+// Lista flat di tutti gli esercizi unici per contatore X/Y
+const globalFlat = [];
+WORKOUT.forEach(b => b.exercises.forEach(ex => globalFlat.push(ex)));
+let globalExIdx = 0;
 
 function pad(n){ return String(n).padStart(2,'0'); }
+function fmtTime(s){ return pad(Math.floor(s/60))+':'+pad(s%60); }
 
 function loadVideo(url) {
   const vid = document.getElementById('ex-video');
   const msg = document.getElementById('loading-msg');
-  if (!url) {
-    if (window._hls) { window._hls.destroy(); window._hls = null; }
-    vid.src = ''; msg.style.display = 'flex'; return;
-  }
-  if (vid.getAttribute('data-current') === url) return; // già caricato
-  vid.setAttribute('data-current', url);
-  msg.style.display = 'none';
+  if (!url) { if(window._hls){window._hls.destroy();window._hls=null;} vid.src=''; msg.style.display='flex'; return; }
+  if (vid.getAttribute('data-cur')===url) return;
+  vid.setAttribute('data-cur', url);
+  msg.style.display='none';
+  if (typeof Hls!=='undefined' && Hls.isSupported()) {
+    if(window._hls) window._hls.destroy();
+    const h=new Hls({autoStartLoad:true,enableWorker:false});
+    h.loadSource(url); h.attachMedia(vid);
+    h.on(Hls.Events.MANIFEST_PARSED,()=>vid.play().catch(()=>{}));
+    h.on(Hls.Events.ERROR,(e,d)=>{if(d.fatal){vid.src=url;vid.load();vid.play().catch(()=>{});}});
+    window._hls=h;
+  } else { vid.src=url; vid.load(); vid.play().catch(()=>{}); }
+}
 
-  // HLS.js: usato se il browser non supporta HLS nativamente (Android/Fire TV)
-  if (typeof Hls !== 'undefined' && Hls.isSupported()) {
-    if (window._hls) window._hls.destroy();
-    const hls = new Hls({ autoStartLoad: true, enableWorker: false });
-    hls.loadSource(url);
-    hls.attachMedia(vid);
-    hls.on(Hls.Events.MANIFEST_PARSED, () => { vid.play().catch(() => {}); });
-    hls.on(Hls.Events.ERROR, (e, d) => {
-      if (d.fatal) {
-        // Fallback: prova src diretto (potrebbe essere MP4 non HLS)
-        vid.src = url; vid.load(); vid.play().catch(() => {});
-      }
-    });
-    window._hls = hls;
-  } else if (vid.canPlayType('application/vnd.apple.mpegurl')) {
-    // Safari: HLS nativo
-    vid.src = url; vid.load(); vid.play().catch(() => {});
+function showAmrap(block) {
+  document.getElementById('ui-amrap').style.display='flex';
+  document.getElementById('ui-interval').style.display='none';
+  document.getElementById('amrap-badge').textContent=String(blockIdx+1).padStart(2,'0');
+  document.getElementById('amrap-name').textContent=block.sectionName;
+  document.getElementById('amrap-schema').textContent=block.sectionSchema;
+  const list=document.getElementById('amrap-list');
+  list.innerHTML=block.exercises.map((ex,i)=>
+    '<div class="amrap-ex'+(i===0?' active':'')+'" id="amr-'+i+'">'+
+    '<span class="amrap-ex-name">'+ex.name.toUpperCase()+'</span>'+
+    '<span class="amrap-ex-reps">'+ex.reps+'</span></div>'
+  ).join('');
+  if(block.exercises[0]) loadVideo(block.exercises[0].videoUrl);
+  updateAmrapTimer(block);
+}
+
+function updateAmrapTimer(block) {
+  document.getElementById('amrap-countdown').textContent=fmtTime(secs);
+  // Cicla esercizi evidenziati in base al tempo trascorso
+  const elapsed = block.totalTime - secs;
+  const cycleLen = Math.max(8, Math.floor(block.totalTime / block.exercises.length));
+  const newIdx = Math.floor(elapsed / cycleLen) % block.exercises.length;
+  if (newIdx !== amrapCycleIdx) {
+    const oldEl=document.getElementById('amr-'+amrapCycleIdx);
+    if(oldEl) oldEl.classList.remove('active');
+    amrapCycleIdx=newIdx;
+    const newEl=document.getElementById('amr-'+amrapCycleIdx);
+    if(newEl) newEl.classList.add('active');
+    if(block.exercises[amrapCycleIdx]?.videoUrl) loadVideo(block.exercises[amrapCycleIdx].videoUrl);
+  }
+}
+
+function showInterval(block) {
+  document.getElementById('ui-amrap').style.display='none';
+  document.getElementById('ui-interval').style.display='-webkit-flex';
+  document.getElementById('ui-interval').style.display='flex';
+  document.getElementById('int-badge').textContent=String(blockIdx+1).padStart(2,'0');
+  document.getElementById('int-name').textContent=block.sectionName;
+  document.getElementById('int-schema').textContent=block.sectionSchema;
+  updateIntervalDisplay(block);
+}
+
+function updateIntervalDisplay(block) {
+  const ex=block.exercises[exIdx];
+  document.getElementById('int-pos').textContent=(globalExIdx+1)+' / '+globalFlat.length;
+  document.getElementById('int-exname').textContent=ex.name.toUpperCase();
+  document.getElementById('int-label').textContent=state==='WORK'?'LAVORO':'RIPOSO';
+  document.getElementById('int-timer').textContent=fmtTime(secs);
+  document.getElementById('int-round').textContent='ROUND '+roundNum+' / '+block.totalRounds;
+  if(state==='WORK' && ex.videoUrl) loadVideo(ex.videoUrl);
+}
+
+function initBlock() {
+  const block=WORKOUT[blockIdx];
+  if(!block) return;
+  exIdx=0; roundNum=1; amrapCycleIdx=0;
+  if(block.type==='AMRAP') {
+    state='AMRAP'; secs=block.totalTime;
+    showAmrap(block);
   } else {
-    // Fallback diretto
-    vid.src = url; vid.load(); vid.play().catch(() => {});
+    state='WORK'; secs=block.workTime;
+    showInterval(block);
   }
 }
-
-function updateDisplay() {
-  if (!EXERCISES.length) return;
-  const ex = EXERCISES[idx];
-  const m = Math.floor(secs/60), s = secs%60;
-  document.getElementById('timer').textContent    = pad(m)+':'+pad(s);
-  document.getElementById('ex-name').textContent  = ex.name.toUpperCase();
-  document.getElementById('ex-pos').textContent   = (idx+1)+' / '+EXERCISES.length;
-  document.getElementById('section-name').textContent  = ex.sectionName;
-  document.getElementById('section-schema').textContent= ex.sectionSchema;
-  document.getElementById('work-label').textContent    = isWork ? 'LAVORO' : 'RIPOSO';
-  const secSt = (typeof sectionStart === 'function') ? sectionStart(idx) : idx;
-  document.getElementById('round-label').textContent   = 'Round '+((sectionRound && sectionRound[secSt])||1);
-  document.getElementById('section-badge').textContent = String(idx+1).padStart(2,'0');
-  document.getElementById('ex-rpe').textContent  = ex.rpe ? 'RPE '+ex.rpe : '';
-  if (isWork) loadVideo(ex.videoUrl);
-}
-
-// Helpers per navigazione sezioni
-function sectionStart(i) {
-  const sec = EXERCISES[i].sectionName;
-  while (i > 0 && EXERCISES[i-1].sectionName === sec) i--;
-  return i;
-}
-function sectionEnd(i) {
-  const sec = EXERCISES[i].sectionName;
-  while (i < EXERCISES.length-1 && EXERCISES[i+1].sectionName === sec) i++;
-  return i;
-}
-// round corrente per esercizio (indicizzato dall'inizio sezione)
-const sectionRound = {};
-EXERCISES.forEach((ex, i) => { if (i === sectionStart(i)) sectionRound[i] = 1; });
 
 function tick() {
-  if (secs > 0) { secs--; updateDisplay(); return; }
-  const ex = EXERCISES[idx];
-  if (isWork && ex.restTime > 0) {
-    isWork = false; secs = ex.restTime;
-  } else {
-    const end   = sectionEnd(idx);
-    const start = sectionStart(idx);
-    if (idx === end) {
-      // fine sezione: controlla rounds rimanenti
-      const curRound = sectionRound[start] || 1;
-      if (curRound < ex.totalRounds) {
-        sectionRound[start] = curRound + 1;
-        idx = start; // ricomincia sezione
-      } else {
-        sectionRound[start] = 1; // reset per prossimo giro
-        idx = end + 1 < EXERCISES.length ? end + 1 : 0;
-      }
-    } else {
-      idx++;
-    }
-    isWork = true; secs = EXERCISES[idx].workTime;
+  const block=WORKOUT[blockIdx];
+  if(!block) return;
+  if(secs>0) {
+    secs--;
+    if(block.type==='AMRAP') updateAmrapTimer(block);
+    else updateIntervalDisplay(block);
+    return;
   }
-  updateDisplay();
+  // Timer a zero
+  if(block.type==='AMRAP') {
+    blockIdx++; globalExIdx+=block.exercises.length;
+    if(blockIdx<WORKOUT.length) initBlock();
+    return;
+  }
+  // INTERVAL
+  if(state==='WORK' && block.restTime>0) {
+    state='REST'; secs=block.restTime; updateIntervalDisplay(block);
+  } else {
+    // Prossimo esercizio / round
+    exIdx++; globalExIdx++;
+    if(exIdx>=block.exercises.length) {
+      exIdx=0; roundNum++;
+      if(roundNum>block.totalRounds) {
+        blockIdx++;
+        if(blockIdx<WORKOUT.length) initBlock();
+        return;
+      }
+      // Non incrementare globalExIdx quando ricominciamo il round (stesso set di esercizi)
+      globalExIdx-=block.exercises.length;
+    }
+    state='WORK'; secs=block.workTime;
+    updateIntervalDisplay(block);
+    loadVideo(block.exercises[exIdx].videoUrl);
+  }
 }
 
-// Orologio live
 function updateClock() {
-  const n = new Date(), el = document.getElementById('clock');
-  if (el) el.textContent = pad(n.getHours())+':'+pad(n.getMinutes())+':'+pad(n.getSeconds());
+  const n=new Date(), el=document.getElementById('clock');
+  if(el) el.textContent=pad(n.getHours())+':'+pad(n.getMinutes())+':'+pad(n.getSeconds());
 }
-updateClock(); setInterval(updateClock, 1000);
-updateDisplay(); setInterval(tick, 1000);
-setTimeout(() => location.reload(), 60*60*1000);
+updateClock(); setInterval(updateClock,1000);
+initBlock(); setInterval(tick,1000);
+setTimeout(()=>location.reload(),60*60*1000);
 </script>
 </body></html>`;
 }
