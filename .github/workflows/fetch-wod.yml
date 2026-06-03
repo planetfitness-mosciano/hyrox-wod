@@ -22,6 +22,15 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Download hls.min.js (same-origin, evita blocchi CDN esterni)
+        run: |
+          if [ ! -f hls.min.js ]; then
+            curl -sL "https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.5.15/hls.min.js" -o hls.min.js
+            echo "hls.min.js scaricato: $(wc -c < hls.min.js) bytes"
+          else
+            echo "hls.min.js gia presente"
+          fi
+
       - name: Install dependencies
         run: npm install
 
@@ -42,11 +51,11 @@ jobs:
           path: debug-login.png
           if-no-files-found: ignore
 
-      - name: Commit and push index.html + timer.html
+      - name: Commit and push
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add index.html timer.html debug-exercise-fields.txt
+          git add index.html timer.html debug-exercise-fields.txt hls.min.js
           git diff --cached --quiet && echo "Nessuna modifica." || \
             git commit -m "chore: WOD automatico $(date -u +'%Y-%m-%d')"
           git push
