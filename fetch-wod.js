@@ -551,6 +551,7 @@ html,body{width:1920px;height:1080px;overflow:hidden;background:#000;color:#fff;
 #ui-interval{display:none;-webkit-flex-direction:column;flex-direction:column;-webkit-flex:1;flex:1}
 .int-inner{display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;-webkit-flex:1;flex:1;padding:12px 36px 0;overflow:hidden}
 .int-pos{font-weight:300;font-size:24px;letter-spacing:.18em;color:rgba(255,255,255,.6);margin-bottom:6px}
+.int-next-badge{display:inline-block;font-weight:900;font-size:16px;letter-spacing:.35em;color:#000;background:#FFE500;border-radius:3px;padding:4px 14px;text-transform:uppercase;margin-bottom:8px}
 .int-exname{font-weight:900;font-size:92px;line-height:.88;letter-spacing:-.02em;text-transform:uppercase;color:#fff;overflow:hidden;-webkit-flex:1;flex:1;display:-webkit-flex;display:flex;-webkit-align-items:flex-end;align-items:flex-end;padding-bottom:12px}
 .int-timer-block{display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;gap:4px;padding-bottom:10px}
 .int-label{font-weight:900;font-size:46px;letter-spacing:.30em;color:#FFE500;text-transform:uppercase;line-height:1}
@@ -607,6 +608,7 @@ video.ex-video{position:absolute;top:0;left:0;right:0;bottom:0;width:100%;height
       </div>
       <div class="int-inner">
         <div class="int-pos" id="int-pos">1 / ${globalTotStr}</div>
+        <span class="int-next-badge" id="int-next-badge" style="display:none">PROSSIMO</span>
         <div class="int-exname" id="int-exname">—</div>
         <div class="int-timer-block">
           <span class="int-label" id="int-label">LAVORO</span>
@@ -717,15 +719,29 @@ function showInterval(block) {
 }
 
 function updateIntervalDisplay(block) {
-  const ex=block.exercises[exIdx];
+  const isWork  = (state === 'WORK');
+  const curEx   = block.exercises[exIdx];
+
+  // Durante il RIPOSO: mostra già l'esercizio SUCCESSIVO (preview + video)
+  // così l'atleta sa cosa sta per fare prima che parta il timer di lavoro
+  let nextIdx = exIdx + 1;
+  if (nextIdx >= block.exercises.length) nextIdx = 0; // ultimo → torna al primo
+  const showEx = isWork ? curEx : block.exercises[nextIdx];
+
+  // Badge PROSSIMO: visibile solo durante RIPOSO
+  const nextBadge = document.getElementById('int-next-badge');
+  if (nextBadge) nextBadge.style.display = isWork ? 'none' : 'inline-block';
+
   document.getElementById('int-pos').textContent=(globalExIdx+1)+' / '+globalFlat.length;
-  document.getElementById('int-exname').textContent=ex.name.toUpperCase();
-  document.getElementById('int-label').textContent=state==='WORK'?'LAVORO':'RIPOSO';
+  document.getElementById('int-exname').textContent=showEx.name.toUpperCase();
+  document.getElementById('int-label').textContent=isWork ? 'LAVORO' : 'RIPOSO';
   document.getElementById('int-timer').textContent=fmtTime(secs);
   document.getElementById('int-round').textContent = block.type==='TABATA'
     ? 'ROUND '+exerciseRound+' / '+block.roundsPerExercise
     : 'ROUND '+roundNum+' / '+block.totalRounds;
-  if(state==='WORK' && ex.videoUrl) loadVideo(ex.videoUrl);
+
+  // Video: durante LAVORO → esercizio corrente; durante RIPOSO → esercizio successivo
+  if (showEx.videoUrl) loadVideo(showEx.videoUrl);
 }
 
 function initBlock() {
