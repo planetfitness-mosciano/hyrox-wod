@@ -1,9 +1,11 @@
 name: Fetch WOD
 
 on:
-  schedule:
-    # 02:50 UTC = 04:50 ora italiana (CET, UTC+2 in estate)
+schedule:
+    # 02:50 UTC = 04:50 ora italiana — run principale
     - cron: '50 2 * * *'
+    # 03:20 UTC = 05:20 ora italiana — retry se il run principale non è partito
+    - cron: '20 3 * * *'
   workflow_dispatch: {}   # permette di avviarlo manualmente da GitHub
 
 jobs:
