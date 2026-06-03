@@ -513,7 +513,7 @@ function buildTimerHtml(lesson, isoDate, videoField) {
 <meta charset="UTF-8">
 <title>HYROX Timer — Planet Fitness Mosciano</title>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;400;600;700;800;900&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.5.15/hls.min.js"></script>
+<script src="./hls.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{width:1920px;height:1080px;overflow:hidden;background:#000;color:#fff;font-family:'Barlow Condensed',sans-serif}
