@@ -1,17 +1,17 @@
 name: Fetch WOD
 
 on:
-schedule:
-    # 02:50 UTC = 04:50 ora italiana — run principale
+  schedule:
     - cron: '50 2 * * *'
-    # 03:20 UTC = 05:20 ora italiana — retry se il run principale non è partito
     - cron: '20 3 * * *'
-  workflow_dispatch: {}   # permette di avviarlo manualmente da GitHub
+  workflow_dispatch: {}
 
 jobs:
   update-wod:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout repo
@@ -28,7 +28,7 @@ jobs:
       - name: Install Chromium for Puppeteer
         run: npx puppeteer browsers install chrome
 
-      - name: Fetch WOD and generate index.html
+      - name: Fetch WOD and generate index.html + timer.html
         env:
           HYROX_EMAIL:    ${{ secrets.HYROX_EMAIL }}
           HYROX_PASSWORD: ${{ secrets.HYROX_PASSWORD }}
@@ -42,12 +42,11 @@ jobs:
           path: debug-login.png
           if-no-files-found: ignore
 
-      - name: Commit and push index.html
+      - name: Commit and push index.html + timer.html
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add index.html timer.html debug-exercise-fields.txt
-          # Commit solo se c'è qualcosa da committare
           git diff --cached --quiet && echo "Nessuna modifica." || \
             git commit -m "chore: WOD automatico $(date -u +'%Y-%m-%d')"
           git push
