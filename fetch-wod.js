@@ -409,8 +409,16 @@ function buildTimerHtml(lesson, isoDate, videoField) {
   function getVid(ex) {
     if (!videoField || !ex.exercise[videoField.name]) return '';
     const v = ex.exercise[videoField.name];
-    const k = videoField.videoSubField || 'url';
-    return (typeof v === 'string') ? v : (v?.[k] || '');
+    if (typeof v === 'string') return v;
+    // signedUrl: fresco del giorno ma scade in ~24h
+    return v?.[videoField.videoSubField] || v?.['signedUrl'] || v?.['url'] || '';
+  }
+  function getVidPermanent(ex) {
+    if (!videoField || !ex.exercise[videoField.name]) return '';
+    const v = ex.exercise[videoField.name];
+    if (typeof v === 'string') return '';
+    // url: campo permanente senza scadenza (fallback se signedUrl scade)
+    return v?.['url'] || v?.[videoField.fallbackSubField] || '';
   }
 
   // ── Costruisci WORKOUT: blocchi AMRAP o INTERVAL ──────────────────────────
@@ -451,7 +459,8 @@ function buildTimerHtml(lesson, isoDate, videoField) {
         exercises: allEx.map(ex => ({
           name: ex.exercise.name,
           reps: getRepStr(ex),
-          videoUrl: getVid(ex)
+          videoUrl: getVid(ex),
+          videoUrlPermanent: getVidPermanent(ex)
         }))
       });
     } else if (isTabata) {
@@ -467,7 +476,8 @@ function buildTimerHtml(lesson, isoDate, videoField) {
         exercises: allEx.map(ex => ({
           name: ex.exercise.name,
           rpe: ex.rpe || null,
-          videoUrl: getVid(ex)
+          videoUrl: getVid(ex),
+          videoUrlPermanent: getVidPermanent(ex)
         }))
       });
     } else if (isForTime) {
@@ -481,7 +491,8 @@ function buildTimerHtml(lesson, isoDate, videoField) {
         exercises: allEx.map(ex => ({
           name: ex.exercise.name,
           reps: getRepStr(ex),
-          videoUrl: getVid(ex)
+          videoUrl: getVid(ex),
+          videoUrlPermanent: getVidPermanent(ex)
         }))
       });
     } else {
@@ -498,7 +509,8 @@ function buildTimerHtml(lesson, isoDate, videoField) {
         exercises: allEx.map(ex => ({
           name: ex.exercise.name,
           rpe: ex.rpe || null,
-          videoUrl: getVid(ex)
+          videoUrl: getVid(ex),
+          videoUrlPermanent: getVidPermanent(ex)
         }))
       });
     }
@@ -646,21 +658,40 @@ let globalExIdx = 0;
 function pad(n){ return String(n).padStart(2,'0'); }
 function fmtTime(s){ return pad(Math.floor(s/60))+':'+pad(s%60); }
 
-function loadVideo(url) {
+function loadVideo(url, fallbackUrl) {
   const vid = document.getElementById('ex-video');
   const msg = document.getElementById('loading-msg');
-  if (!url) { if(window._hls){window._hls.destroy();window._hls=null;} vid.src=''; msg.style.display='flex'; return; }
-  if (vid.getAttribute('data-cur')===url) return;
-  vid.setAttribute('data-cur', url);
+  if (!url && !fallbackUrl) {
+    if(window._hls){window._hls.destroy();window._hls=null;}
+    vid.src=''; msg.style.display='flex'; return;
+  }
+  const primary = url || fallbackUrl;
+  const backup  = (url && fallbackUrl && url!==fallbackUrl) ? fallbackUrl : null;
+  if (vid.getAttribute('data-cur')===primary) return;
+  vid.setAttribute('data-cur', primary);
   msg.style.display='none';
-  if (typeof Hls!=='undefined' && Hls.isSupported()) {
-    if(window._hls) window._hls.destroy();
-    const h=new Hls({autoStartLoad:true,enableWorker:false});
-    h.loadSource(url); h.attachMedia(vid);
-    h.on(Hls.Events.MANIFEST_PARSED,()=>vid.play().catch(()=>{}));
-    h.on(Hls.Events.ERROR,(e,d)=>{if(d.fatal){vid.src=url;vid.load();vid.play().catch(()=>{});}});
-    window._hls=h;
-  } else { vid.src=url; vid.load(); vid.play().catch(()=>{}); }
+
+  function tryPlay(src, nextSrc) {
+    if (typeof Hls!=='undefined' && Hls.isSupported()) {
+      if(window._hls) window._hls.destroy();
+      const h=new Hls({autoStartLoad:true,enableWorker:false});
+      h.loadSource(src); h.attachMedia(vid);
+      h.on(Hls.Events.MANIFEST_PARSED,()=>vid.play().catch(()=>{}));
+      h.on(Hls.Events.ERROR,(e,d)=>{
+        if(d.fatal) {
+          // Errore fatale HLS: prova URL diretto, poi fallback
+          h.destroy();
+          if(nextSrc) { tryPlay(nextSrc, null); }
+          else { vid.src=src; vid.load(); vid.play().catch(()=>{}); }
+        }
+      });
+      window._hls=h;
+    } else {
+      vid.src=src; vid.load(); vid.play().catch(()=>{});
+      vid.onerror=()=>{ if(nextSrc){ vid.onerror=null; tryPlay(nextSrc,null); } };
+    }
+  }
+  tryPlay(primary, backup);
 }
 
 function showAmrap(block) {
@@ -688,7 +719,7 @@ function showAmrap(block) {
     '<span class="amrap-ex-name">'+ex.name.toUpperCase()+'</span>'+
     '<span class="amrap-ex-reps">'+ex.reps+'</span></div>'
   ).join('');
-  if(block.exercises[0]) loadVideo(block.exercises[0].videoUrl);
+  if(block.exercises[0]) loadVideo(block.exercises[0].videoUrl, block.exercises[0].videoUrlPermanent);
   updateAmrapTimer(block);
 }
 
@@ -704,7 +735,7 @@ function updateAmrapTimer(block) {
     amrapCycleIdx=newIdx;
     const newEl=document.getElementById('amr-'+amrapCycleIdx);
     if(newEl) newEl.classList.add('active');
-    if(block.exercises[amrapCycleIdx]?.videoUrl) loadVideo(block.exercises[amrapCycleIdx].videoUrl);
+    if(block.exercises[amrapCycleIdx]?.videoUrl||block.exercises[amrapCycleIdx]?.videoUrlPermanent) loadVideo(block.exercises[amrapCycleIdx]?.videoUrl,block.exercises[amrapCycleIdx]?.videoUrlPermanent);
   }
 }
 
@@ -741,7 +772,7 @@ function updateIntervalDisplay(block) {
     : 'ROUND '+roundNum+' / '+block.totalRounds;
 
   // Video: durante LAVORO → esercizio corrente; durante RIPOSO → esercizio successivo
-  if (showEx.videoUrl) loadVideo(showEx.videoUrl);
+  if (showEx.videoUrl || showEx.videoUrlPermanent) loadVideo(showEx.videoUrl, showEx.videoUrlPermanent);
 }
 
 function initBlock() {
@@ -836,7 +867,7 @@ function tick() {
       showInterval(block);
       const il=document.getElementById('int-label'); if(il) il.textContent='TABATA';
       const ir=document.getElementById('int-round'); if(ir) ir.textContent='ROUND '+exerciseRound+' / '+block.roundsPerExercise;
-      loadVideo(block.exercises[exIdx].videoUrl);
+      loadVideo(block.exercises[exIdx].videoUrl, block.exercises[exIdx].videoUrlPermanent);
     }
     return;
   }
@@ -858,7 +889,7 @@ function tick() {
     }
     state='WORK'; secs=block.workTime;
     updateIntervalDisplay(block);
-    loadVideo(block.exercises[exIdx].videoUrl);
+    loadVideo(block.exercises[exIdx].videoUrl, block.exercises[exIdx].videoUrlPermanent);
   }
 }
 
@@ -972,17 +1003,19 @@ async function getExerciseVideoField(token) {
     }
 
     // Preferisci signedUrl (CDN con firma temporanea, quello che funziona per playback)
-    // poi url come fallback
-    const subField =
-      vidFields.find(f => f.name === 'signedUrl')?.name ||
-      vidFields.find(f => f.name === 'url')?.name        ||
-      vidFields.find(f => f.name.toLowerCase().includes('url'))?.name ||
-      'url';
-
-    const query = `video { ${subField} }`;
-    console.log(`Campo video: video.${subField} — query: "${query}"`);
+    // Recupera ENTRAMBI url e signedUrl: url è permanente, signedUrl scade in ~24h
+    const hasSignedUrl = vidFields.some(f => f.name === 'signedUrl');
+    const hasUrl       = vidFields.some(f => f.name === 'url');
+    // Query che recupera entrambi se disponibili
+    const fields = [];
+    if (hasUrl)       fields.push('url');
+    if (hasSignedUrl) fields.push('signedUrl');
+    if (fields.length === 0) fields.push('url'); // fallback sicuro
+    const query = `video { ${fields.join(' ')} }`;
+    console.log(`Campo video: ${query}`);
     console.log(`Campi Video disponibili: ${vidFields.map(f=>f.name).join(', ')}`);
-    return { name: 'video', query, videoSubField: subField };
+    // videoSubField = campo preferito per l'estrazione (signedUrl se fresco, altrimenti url)
+    return { name: 'video', query, videoSubField: 'signedUrl', fallbackSubField: 'url' };
   } catch (e) {
     console.log('Introspection video field fallita:', e.message);
     return null;
