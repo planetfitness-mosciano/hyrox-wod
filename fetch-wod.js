@@ -278,7 +278,7 @@ function buildHtml(lesson, isoDate, qrDataUrl) {
       <div class="eyebrow">Porta il WOD con te</div>
       <div class="qr-title">ESEGUI QUESTO<br>ALLENAMENTO<br>SUL TUO TELEFONO</div>
       <div class="qr-box"><img class="qr-img" src="${qrDataUrl}" alt="QR code allenamento"></div>
-      <div class="qr-hint">Inquadra il QR code con la fotocamera<br>Timer guidato &middot; video esercizi &middot; valido solo oggi</div>
+      <div class="qr-hint">Inquadra il QR code con la fotocamera<br>Timer guidato &bull; video esercizi &bull; pausa e riparti quando vuoi</div>
     </div>` : '';
 
   // Sections HTML
@@ -341,9 +341,9 @@ ${CSS}
 /* ── Pannello QR (alternato alle info) ── */
 .qr-panel{display:flex;-webkit-flex-direction:column;flex-direction:column;-webkit-align-items:center;align-items:center;-webkit-justify-content:center;justify-content:center;text-align:center}
 .qr-title{font-weight:900;font-size:44px;line-height:1.04;letter-spacing:.02em;color:#fff;text-transform:uppercase;margin:14px 0 26px}
-.qr-box{background:#fff;border-radius:14px;padding:18px;line-height:0;box-shadow:0 0 0 6px #FFE500}
+.qr-box{background:#000;border-radius:14px;padding:18px;line-height:0;box-shadow:0 0 0 6px #FFE500}
 .qr-img{width:300px;height:300px;display:block}
-.qr-hint{margin-top:26px;font-size:19px;line-height:1.5;letter-spacing:.06em;color:rgba(255,255,255,.75);text-transform:uppercase}
+.qr-hint{margin-top:26px;font-size:19px;line-height:1.6;letter-spacing:.06em;color:#FFE500;font-weight:600;text-transform:uppercase}
 </style></head>
 <body>
 <div class="screen">
@@ -1709,9 +1709,10 @@ async function main() {
   let qrDataUrl = '';
   try {
     const QRCode = require('qrcode');
+    // Colori invertiti: moduli bianchi su sfondo nero (stile display)
     qrDataUrl = await QRCode.toDataURL(mobileUrl, {
       width: 600, margin: 2, errorCorrectionLevel: 'M',
-      color: { dark: '#000000', light: '#ffffff' }
+      color: { dark: '#ffffff', light: '#000000' }
     });
     console.log(`✓ QR generato per ${mobileUrl}`);
   } catch (e) {
