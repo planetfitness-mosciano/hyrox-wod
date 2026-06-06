@@ -1014,12 +1014,12 @@ video.ex-video{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:
 /* ── Portrait: layout impilato — video sopra (i clip HYROX sono verticali), timer sotto ── */
 @media (orientation: portrait){
   .main{flex-direction:column-reverse}
-  .info{width:100%;min-width:0;flex:0 0 57%;border-right:none;border-top:1px solid rgba(255,255,255,.18);padding:10px 14px}
+  .info{width:100%;min-width:0;flex:0 0 42%;border-right:none;border-top:1px solid rgba(255,255,255,.18);padding:8px 14px}
   .video-wrap{flex:1 1 auto;min-height:0}
-  .amrap-countdown{font-size:12vh}
-  .int-exname{font-size:5vh;padding-bottom:4px}
-  .int-label{font-size:2.6vh}
-  .int-timer{font-size:11vh}
+  .amrap-countdown{font-size:10vh}
+  .int-exname{font-size:4.2vh;padding-bottom:4px}
+  .int-label{font-size:2.4vh}
+  .int-timer{font-size:9vh}
 }
 </style>
 </head>
@@ -1051,7 +1051,7 @@ video.ex-video{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:
     </div>
     <div class="video-wrap">
       <div class="loading-msg" id="loading-msg">Caricamento video...</div>
-      <video class="ex-video" id="ex-video" autoplay muted loop playsinline></video>
+      <video class="ex-video" id="ex-video" autoplay muted loop playsinline preload="auto"></video>
       <div class="pause-flag" id="pause-flag">IN PAUSA</div>
     </div>
   </div>
@@ -1068,6 +1068,9 @@ let blockIdx = 0, state = 'INIT', secs = 0;
 let exIdx = 0, roundNum = 1, amrapCycleIdx = 0;
 let exerciseRound = 1;
 let paused = false;
+
+// Cache locale dei video (blob in RAM): cambi esercizio istantanei, zero rete
+const videoCache = {};
 
 const globalFlat = [];
 WORKOUT.forEach(function(b){ b.exercises.forEach(function(ex){ globalFlat.push(ex); }); });
@@ -1104,7 +1107,7 @@ function loadVideo(url, fallbackUrl) {
       window._hls=h;
     } else {
       if(window._hls){ window._hls.destroy(); window._hls=null; }
-      vid.src=src; vid.load(); if(!paused) vid.play().catch(function(){});
+      vid.src=videoCache[src]||src; vid.load(); if(!paused) vid.play().catch(function(){});
       vid.onerror=function(){ if(nextSrc){ vid.onerror=null; tryPlay(nextSrc,null); } };
     }
   }
@@ -1364,6 +1367,9 @@ function onFirstGesture(){
     firstGesture=true;
     const d=document.documentElement;
     try{ if(d.requestFullscreen){ const p=d.requestFullscreen(); if(p&&p.catch) p.catch(function(){}); } }catch(e){}
+    // il gesto utente è il momento più affidabile per wake lock e nosleep
+    acquireWake();
+    if(noSleepVid) noSleepVid.play().catch(function(){});
   }
 }
 document.addEventListener('click',onFirstGesture,true);
@@ -1416,13 +1422,59 @@ function setPaused(p){
 }
 document.getElementById('pause-btn').addEventListener('click',function(){ setPaused(!paused); });
 
+// ── Prefetch in background di tutti i video del giorno ──
+// Scarica i video uno alla volta e li tiene in RAM come blob: i cambi
+// esercizio diventano istantanei e il workout non dipende più dalla rete.
+(function(){
+  const seen={}, urls=[];
+  WORKOUT.forEach(function(b){ b.exercises.forEach(function(ex){
+    const u=ex.videoUrl||ex.videoUrlPermanent;
+    if(u && u.indexOf('.m3u8')===-1 && !seen[u]){ seen[u]=1; urls.push(u); }
+  }); });
+  let i=0;
+  function next(){
+    if(i>=urls.length){ return; }
+    const u=urls[i++];
+    if(videoCache[u]){ next(); return; }
+    fetch(u).then(function(r){ if(!r.ok) throw new Error('http '+r.status); return r.blob(); })
+      .then(function(b){ try{ videoCache[u]=URL.createObjectURL(b); }catch(e){} next(); })
+      .catch(function(){ setTimeout(next, 800); });
+  }
+  setTimeout(next, 1200); // lascia partire il primo video, poi scarica il resto
+})();
+
 // ── Wake Lock: tieni lo schermo acceso durante il workout ──
 let wakeLock=null;
 function acquireWake(){
-  if(!('wakeLock' in navigator)) return;
-  navigator.wakeLock.request('screen').then(function(wl){ wakeLock=wl; }).catch(function(){});
+  if('wakeLock' in navigator){
+    navigator.wakeLock.request('screen').then(function(wl){
+      wakeLock=wl;
+      // se il sistema lo rilascia (es. cambio app), riprova
+      wl.addEventListener('release',function(){ setTimeout(acquireWake,1000); });
+    }).catch(function(){ startNoSleep(); });
+  } else {
+    startNoSleep();
+  }
 }
-document.addEventListener('visibilitychange',function(){ if(document.visibilityState==='visible') acquireWake(); });
+// Fallback per browser senza Wake Lock API (es. iOS vecchi): un video
+// invisibile in loop tiene lo schermo attivo (trucco NoSleep).
+let noSleepVid=null;
+function startNoSleep(){
+  if(noSleepVid) return;
+  try{
+    const v=document.createElement('video');
+    v.setAttribute('muted',''); v.muted=true;
+    v.setAttribute('playsinline',''); v.setAttribute('loop','');
+    v.style.cssText='position:fixed;left:-10px;top:-10px;width:2px;height:2px;opacity:0;pointer-events:none';
+    v.src='data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAMRbW9vdgAAAGxtdmhkAAAAAAAAAAAAAAAAAAAD6AAAA+gAAQAAAQAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAjt0cmFrAAAAXHRraGQAAAADAAAAAAAAAAAAAAABAAAAAAAAA+gAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAIAAAACAAAAAAAkZWR0cwAAABxlbHN0AAAAAAAAAAEAAAPoAAAAAAABAAAAAAGzbWRpYQAAACBtZGhkAAAAAAAAAAAAAAAAAABAAAAAQABVxAAAAAAALWhkbHIAAAAAAAAAAHZpZGUAAAAAAAAAAAAAAABWaWRlb0hhbmRsZXIAAAABXm1pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAAR5zdGJsAAAAunN0c2QAAAAAAAAAAQAAAKphdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAIAAgBIAAAASAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGP//AAAAMGF2Y0MBQsAK/+EAGGdCwArZH4iIwEQAAAMABAAAAwAIPEiZIAEABWjLg8sgAAAAEHBhc3AAAAABAAAAAQAAABRidHJ0AAAAAAAAFDAAABQwAAAAGHN0dHMAAAAAAAAAAQAAAAEAAEAAAAAAHHN0c2MAAAAAAAAAAQAAAAEAAAABAAAAAQAAABRzdHN6AAAAAAAAAoYAAAABAAAAFHN0Y28AAAAAAAAAAQAAA0EAAABidWR0YQAAAFptZXRhAAAAAAAAACFoZGxyAAAAAAAAAABtZGlyYXBwbAAAAAAAAAAAAAAAAC1pbHN0AAAAJal0b28AAAAdZGF0YQAAAAEAAAAATGF2ZjU4Ljc2LjEwMAAAAAhmcmVlAAACjm1kYXQAAAJwBgX//2zcRem95tlIt5Ys2CDZI+7veDI2NCAtIGNvcmUgMTYzIHIzMDYwIDVkYjZhYTYgLSBILjI2NC9NUEVHLTQgQVZDIGNvZGVjIC0gQ29weWxlZnQgMjAwMy0yMDIxIC0gaHR0cDovL3d3dy52aWRlb2xhbi5vcmcveDI2NC5odG1sIC0gb3B0aW9uczogY2FiYWM9MCByZWY9MyBkZWJsb2NrPTE6MDowIGFuYWx5c2U9MHgxOjB4MTExIG1lPWhleCBzdWJtZT03IHBzeT0xIHBzeV9yZD0xLjAwOjAuMDAgbWl4ZWRfcmVmPTEgbWVfcmFuZ2U9MTYgY2hyb21hX21lPTEgdHJlbGxpcz0xIDh4OGRjdD0wIGNxbT0wIGRlYWR6b25lPTIxLDExIGZhc3RfcHNraXA9MSBjaHJvbWFfcXBfb2Zmc2V0PS0yIHRocmVhZHM9MSBsb29rYWhlYWRfdGhyZWFkcz0xIHNsaWNlZF90aHJlYWRzPTAgbnI9MCBkZWNpbWF0ZT0xIGludGVybGFjZWQ9MCBibHVyYXlfY29tcGF0PTAgY29uc3RyYWluZWRfaW50cmE9MCBiZnJhbWVzPTAgd2VpZ2h0cD0wIGtleWludD0yNTAga2V5aW50X21pbj0xIHNjZW5lY3V0PTQwIGludHJhX3JlZnJlc2g9MCByY19sb29rYWhlYWQ9NDAgcmM9Y3JmIG1idHJlZT0xIGNyZj0yMy4wIHFjb21wPTAuNjAgcXBtaW49MCBxcG1heD02OSBxcHN0ZXA9NCBpcF9yYXRpbz0xLjQwIGFxPTE6MS4wMACAAAAADmWIhAV///8PRQABQt+A';
+    document.body.appendChild(v);
+    v.play().catch(function(){});
+    noSleepVid=v;
+  }catch(e){}
+}
+document.addEventListener('visibilitychange',function(){
+  if(document.visibilityState==='visible'){ acquireWake(); if(noSleepVid) noSleepVid.play().catch(function(){}); }
+});
 acquireWake();
 
 initBlock();
