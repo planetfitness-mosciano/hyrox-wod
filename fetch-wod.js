@@ -1781,9 +1781,30 @@ async function localizeVideos(lesson, videoField) {
         if (res.ok) {
           const buf = Buffer.from(await res.arrayBuffer());
           if (buf.length > 1000) {
-            fs.writeFileSync(dest, buf);
+            // Ricodifica con ffmpeg per ridurre il peso (rete palestra lenta):
+            // 720p max, CRF 28, niente audio (i player girano sempre muti).
+            const tmp = dest + '.orig';
+            fs.writeFileSync(tmp, buf);
+            let kept = 'originale';
+            try {
+              const { execFileSync } = require('child_process');
+              execFileSync('ffmpeg', ['-y', '-i', tmp,
+                '-vf', "scale='min(720,iw)':-2",
+                '-c:v', 'libx264', '-crf', '28', '-preset', 'veryfast',
+                '-movflags', '+faststart', '-an', dest], { stdio: 'ignore' });
+              const newSize = fs.statSync(dest).size;
+              if (newSize > 1000 && newSize < buf.length) {
+                kept = 'ricodificato';
+                fs.unlinkSync(tmp);
+              } else {
+                fs.renameSync(tmp, dest); // ricodifica inutile/peggiore: tieni l'originale
+              }
+            } catch (e) {
+              fs.renameSync(tmp, dest);   // ffmpeg assente o errore: tieni l'originale
+            }
             downloaded++;
-            console.log(`  ↓ ${base} (${(buf.length / 1048576).toFixed(1)} MB)`);
+            const finalMB = (fs.statSync(dest).size / 1048576).toFixed(1);
+            console.log(`  ↓ ${base} (${(buf.length / 1048576).toFixed(1)} MB → ${finalMB} MB, ${kept})`);
           }
         } else {
           console.warn(`  ⚠ download fallito ${base}: HTTP ${res.status}`);
