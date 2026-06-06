@@ -10,6 +10,7 @@
 const puppeteer = require('puppeteer');
 const fs        = require('fs');
 const path      = require('path');
+const crypto    = require('crypto');
 
 const GRAPHQL   = 'https://api.prod.hyrox.fiit-tech.net/graphql';
 const PORTAL    = 'https://portal.hyrox365.com/login';
@@ -248,7 +249,7 @@ function initScroll(){
 document.addEventListener('DOMContentLoaded',initScroll);
 `.trim();
 
-function buildHtml(lesson, isoDate) {
+function buildHtml(lesson, isoDate, qrDataUrl) {
   // Title: "Complete #201" → "Complete <br>#201"
   const titleMatch = lesson.name.match(/^(.+?)\s+(#\d+)$/);
   const titleHtml  = titleMatch
@@ -270,6 +271,15 @@ function buildHtml(lesson, isoDate) {
 
   // Date in Italian
   const dateStr = italianDate(isoDate);
+
+  // Pannello QR (alternato al contenuto info della colonna sinistra)
+  const qrBlock = qrDataUrl ? `
+    <div class="left-body qr-panel" id="qr-panel" style="display:none">
+      <div class="eyebrow">Porta il WOD con te</div>
+      <div class="qr-title">ESEGUI QUESTO<br>ALLENAMENTO<br>SUL TUO TELEFONO</div>
+      <div class="qr-box"><img class="qr-img" src="${qrDataUrl}" alt="QR code allenamento"></div>
+      <div class="qr-hint">Inquadra il QR code con la fotocamera<br>Timer guidato &middot; video esercizi &middot; valido solo oggi</div>
+    </div>` : '';
 
   // Sections HTML
   let sectionsHtml = '';
@@ -328,6 +338,12 @@ function buildHtml(lesson, isoDate) {
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800;900&family=Barlow:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
 ${CSS}
+/* ── Pannello QR (alternato alle info) ── */
+.qr-panel{display:flex;-webkit-flex-direction:column;flex-direction:column;-webkit-align-items:center;align-items:center;-webkit-justify-content:center;justify-content:center;text-align:center}
+.qr-title{font-weight:900;font-size:44px;line-height:1.04;letter-spacing:.02em;color:#fff;text-transform:uppercase;margin:14px 0 26px}
+.qr-box{background:#fff;border-radius:14px;padding:18px;line-height:0;box-shadow:0 0 0 6px #FFE500}
+.qr-img{width:300px;height:300px;display:block}
+.qr-hint{margin-top:26px;font-size:19px;line-height:1.5;letter-spacing:.06em;color:rgba(255,255,255,.75);text-transform:uppercase}
 </style></head>
 <body>
 <div class="screen">
@@ -338,7 +354,7 @@ ${CSS}
       <div class="logo-divider"></div>
       <div class="pf-wrap"><img class="pf-img" src="data:image/png;base64,${PF_LOGO_B64}" alt="Planet Fitness"></div>
     </div>
-    <div class="left-body">
+    <div class="left-body" id="left-body">
       <div class="eyebrow">Workout of the Day</div>
       <div class="wod-title">${titleHtml}</div>
       <div class="wod-desc">${esc(desc)}</div>
@@ -348,7 +364,7 @@ ${CSS}
         <div class="meta-item"><div class="meta-lbl">Esercizi</div><div class="meta-val">${totalEx}</div></div>
         <div class="meta-item"><div class="meta-lbl">Sezioni</div><div class="meta-val">${totalSections}</div></div>
       </div>
-    </div>
+    </div>${qrBlock}
     <div class="date-row"><span id="clock" class="clock-inline"></span>${esc(dateStr)}</div>
   </div>
   <div class="right">
@@ -376,6 +392,18 @@ function updateClock(){
 }
 updateClock();
 setInterval(updateClock,1000);
+// Alternanza info ↔ QR nella colonna sinistra (ogni 15s)
+(function(){
+  const info=document.getElementById('left-body'), qr=document.getElementById('qr-panel');
+  if(!info||!qr) return;
+  let showQr=false;
+  setInterval(()=>{
+    showQr=!showQr;
+    info.style.display=showQr?'none':'';
+    qr.style.display=showQr?'-webkit-flex':'none';
+    if(showQr) qr.style.display='flex';
+  },15000);
+})();
 // Ricarica la pagina ogni ora
 setTimeout(()=>location.reload(), 60*60*1000);
 </script>
@@ -403,9 +431,8 @@ function getRepStr(ex) {
   return '—';
 }
 
-// ─── Timer HTML generation ────────────────────────────────────────────────────
-function buildTimerHtml(lesson, isoDate, videoField) {
-  const dateStr = italianDate(isoDate);
+// ─── Costruzione dati WORKOUT (condivisa da timer.html e pagina mobile) ──────
+function buildWorkoutData(lesson, videoField) {
 
   function getVid(ex) {
     if (!videoField || !ex.exercise[videoField.name]) return '';
@@ -517,6 +544,13 @@ function buildTimerHtml(lesson, isoDate, videoField) {
     }
   }
 
+  return { WORKOUT, globalTotal };
+}
+
+// ─── Timer HTML generation ────────────────────────────────────────────────────
+function buildTimerHtml(lesson, isoDate, videoField) {
+  const dateStr = italianDate(isoDate);
+  const { WORKOUT, globalTotal } = buildWorkoutData(lesson, videoField);
   const workoutJson  = JSON.stringify(WORKOUT);
   const globalTotStr = String(globalTotal);
 
@@ -908,6 +942,425 @@ setTimeout(()=>location.reload(),60*60*1000);
 </body></html>`;
 }
 
+// ─── Timer MOBILE (pagina giornaliera raggiungibile solo via QR) ──────────────
+// Vive in m/<token>.html: i path locali (videos/, hls.min.js) risalgono di 1 livello.
+function buildTimerMobileHtml(lesson, isoDate, videoField) {
+  const dateStr = italianDate(isoDate);
+  const { WORKOUT } = buildWorkoutData(lesson, videoField);
+
+  const fixPath = u => (typeof u === 'string') ? u.replace(/^\.\//, '../') : u;
+  const MOBILE = WORKOUT.map(b => Object.assign({}, b, {
+    exercises: b.exercises.map(ex => Object.assign({}, ex, {
+      videoUrl: fixPath(ex.videoUrl),
+      videoUrlPermanent: fixPath(ex.videoUrlPermanent)
+    }))
+  }));
+  const workoutJson = JSON.stringify(MOBILE);
+
+  return `<!DOCTYPE html>
+<!-- generated:${new Date().toISOString()} -->
+<html lang="it"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="robots" content="noindex, nofollow">
+<title>HYROX WOD — Planet Fitness Mosciano</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;400;600;700;800;900&display=swap" rel="stylesheet">
+<script src="../hls.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;overflow:hidden;background:#000;color:#fff;font-family:'Barlow Condensed',sans-serif;-webkit-user-select:none;user-select:none}
+.app{display:flex;flex-direction:column;width:100%;height:100%}
+.topbar{position:relative;height:48px;min-height:48px;display:flex;align-items:center;gap:10px;background:#0d0d0d;border-bottom:1px solid rgba(255,255,255,.18);padding:0 10px}
+.bar-accent{position:absolute;top:0;left:0;right:0;height:4px;background:#FFE500}
+.icon-btn{width:40px;height:40px;border:1px solid rgba(255,255,255,.25);border-radius:8px;background:transparent;color:#fff;font-size:20px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:inherit}
+.icon-btn:active{background:rgba(255,229,0,.2)}
+.tb-title{flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;display:flex;align-items:center;gap:8px}
+.tb-name{font-weight:800;font-size:18px;letter-spacing:.08em;text-transform:uppercase;overflow:hidden;text-overflow:ellipsis}
+.tb-fmt{font-weight:900;font-size:11px;letter-spacing:.2em;color:#000;background:#FFE500;border-radius:3px;padding:2px 7px;text-transform:uppercase;flex-shrink:0}
+#pause-btn{border-color:rgba(255,229,0,.7);color:#FFE500;font-size:15px}
+.main{flex:1;display:flex;flex-direction:row;overflow:hidden;position:relative}
+.info{width:42%;min-width:42%;background:#0d0d0d;border-right:1px solid rgba(255,255,255,.18);display:flex;flex-direction:column;overflow:hidden;padding:8px 12px}
+#ui-amrap{display:flex;flex-direction:column;flex:1;overflow:hidden}
+.amrap-label{font-weight:900;font-size:12px;letter-spacing:.3em;color:rgba(255,229,0,.7);text-transform:uppercase}
+.amrap-countdown{font-weight:200;font-size:17vh;line-height:1;color:#fff;margin:2px 0 6px}
+.amrap-list{flex:1;overflow:auto;-webkit-overflow-scrolling:touch}
+.amrap-ex{display:flex;align-items:center;justify-content:space-between;padding:5px 8px;border-bottom:1px solid rgba(255,255,255,.08);border-radius:4px}
+.amrap-ex.active{background:rgba(255,229,0,.12)}
+.amrap-ex-name{font-weight:700;font-size:15px;letter-spacing:.04em;text-transform:uppercase;color:rgba(255,255,255,.8)}
+.amrap-ex.active .amrap-ex-name{color:#fff}
+.amrap-ex-reps{font-weight:900;font-size:15px;color:#FFE500;flex-shrink:0;margin-left:8px}
+#ui-interval{display:none;flex-direction:column;flex:1;overflow:hidden}
+.int-pos{font-weight:300;font-size:13px;letter-spacing:.18em;color:rgba(255,255,255,.6)}
+.int-next-badge{display:inline-block;align-self:flex-start;font-weight:900;font-size:11px;letter-spacing:.3em;color:#000;background:#FFE500;border-radius:3px;padding:2px 8px;text-transform:uppercase;margin:4px 0}
+.int-exname{font-weight:900;font-size:7.5vh;line-height:.9;text-transform:uppercase;color:#fff;flex:1;display:flex;align-items:flex-end;overflow:hidden;padding-bottom:6px}
+.int-label{font-weight:900;font-size:4vh;letter-spacing:.25em;color:#FFE500;text-transform:uppercase;line-height:1}
+.int-timer{font-weight:200;font-size:15vh;line-height:1;color:#fff}
+.int-round{font-weight:600;font-size:14px;letter-spacing:.2em;color:rgba(255,255,255,.65);text-transform:uppercase}
+.video-wrap{flex:1;position:relative;background:#000;overflow:hidden}
+video.ex-video{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain;background:#000}
+.loading-msg{position:absolute;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;font-size:14px;letter-spacing:.18em;color:rgba(255,255,255,.35);background:#000}
+.pause-flag{position:absolute;top:8px;right:8px;z-index:30;font-weight:900;font-size:12px;letter-spacing:.3em;color:#000;background:#FFE500;border-radius:3px;padding:3px 10px;display:none}
+.drawer-backdrop{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);opacity:0;pointer-events:none;transition:opacity .25s;z-index:40}
+.drawer-backdrop.open{opacity:1;pointer-events:auto}
+.drawer{position:fixed;top:0;bottom:0;left:0;width:min(75vw,330px);background:#111;border-right:2px solid #FFE500;transform:translateX(-105%);transition:transform .25s;z-index:50;display:flex;flex-direction:column;padding:14px 0;overflow-y:auto}
+.drawer.open{transform:translateX(0)}
+.drawer-hd{font-weight:900;font-size:13px;letter-spacing:.3em;color:rgba(255,229,0,.8);text-transform:uppercase;padding:0 16px 10px;border-bottom:1px solid rgba(255,255,255,.15);margin-bottom:6px}
+.drawer-item{display:flex;align-items:center;gap:10px;width:100%;background:transparent;border:none;border-bottom:1px solid rgba(255,255,255,.08);color:#fff;padding:12px 16px;text-align:left;font-family:inherit}
+.drawer-item:active,.drawer-item.cur{background:rgba(255,229,0,.14)}
+.di-badge{font-weight:900;font-size:12px;color:#000;background:#FFE500;border-radius:3px;padding:2px 7px;flex-shrink:0}
+.di-name{flex:1;font-weight:700;font-size:16px;letter-spacing:.05em;text-transform:uppercase}
+.di-fmt{font-weight:600;font-size:11px;letter-spacing:.15em;color:rgba(255,229,0,.8);text-transform:uppercase;flex-shrink:0}
+.drawer-foot{margin-top:auto;padding:14px 16px 4px;font-size:11px;letter-spacing:.15em;color:rgba(255,255,255,.4);text-transform:uppercase}
+.rotate-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#000;z-index:100;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;padding:24px}
+.rotate-icon{font-size:54px}
+.rotate-msg{font-weight:800;font-size:24px;letter-spacing:.1em;text-transform:uppercase}
+.rotate-sub{font-size:14px;color:rgba(255,255,255,.6);letter-spacing:.08em}
+@media (orientation: portrait){ .rotate-overlay{display:flex} }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="topbar">
+    <div class="bar-accent"></div>
+    <button class="icon-btn" id="menu-btn" aria-label="Menu">&#9776;</button>
+    <div class="tb-title"><span class="tb-name" id="tb-name">&mdash;</span><span class="tb-fmt" id="tb-fmt"></span></div>
+    <button class="icon-btn" id="pause-btn" aria-label="Pausa">&#10074;&#10074;</button>
+  </div>
+  <div class="main">
+    <div class="info">
+      <div id="ui-amrap">
+        <div class="amrap-label" id="amrap-label">&mdash;</div>
+        <div class="amrap-countdown" id="amrap-countdown">00:00</div>
+        <div class="amrap-list" id="amrap-list"></div>
+      </div>
+      <div id="ui-interval">
+        <div class="int-pos" id="int-pos"></div>
+        <span class="int-next-badge" id="int-next-badge" style="display:none">PROSSIMO</span>
+        <div class="int-exname" id="int-exname">&mdash;</div>
+        <span class="int-label" id="int-label">LAVORO</span>
+        <div class="int-timer" id="int-timer">00:00</div>
+        <span class="int-round" id="int-round">ROUND 1</span>
+      </div>
+    </div>
+    <div class="video-wrap">
+      <div class="loading-msg" id="loading-msg">Caricamento video...</div>
+      <video class="ex-video" id="ex-video" autoplay muted loop playsinline></video>
+      <div class="pause-flag" id="pause-flag">IN PAUSA</div>
+    </div>
+  </div>
+</div>
+<div class="drawer-backdrop" id="drawer-backdrop"></div>
+<div class="drawer" id="drawer">
+  <div class="drawer-hd">Fasi allenamento</div>
+  <div id="drawer-items"></div>
+  <div class="drawer-foot">Planet Fitness &middot; Mosciano S.A.<br>${esc(dateStr)}</div>
+</div>
+<div class="rotate-overlay">
+  <div class="rotate-icon">&#128241;</div>
+  <div class="rotate-msg">Ruota il telefono</div>
+  <div class="rotate-sub">Questo allenamento si usa in orizzontale</div>
+</div>
+<script>
+const WORKOUT = ${workoutJson};
+let blockIdx = 0, state = 'INIT', secs = 0;
+let exIdx = 0, roundNum = 1, amrapCycleIdx = 0;
+let exerciseRound = 1;
+let paused = false;
+
+const globalFlat = [];
+WORKOUT.forEach(function(b){ b.exercises.forEach(function(ex){ globalFlat.push(ex); }); });
+let globalExIdx = 0;
+
+function pad(n){ return String(n).padStart(2,'0'); }
+function fmtTime(s){ return pad(Math.floor(s/60))+':'+pad(s%60); }
+
+function loadVideo(url, fallbackUrl) {
+  const vid = document.getElementById('ex-video');
+  const msg = document.getElementById('loading-msg');
+  if (!url && !fallbackUrl) {
+    if(window._hls){window._hls.destroy();window._hls=null;}
+    vid.removeAttribute('data-cur'); vid.src=''; msg.style.display='flex'; return;
+  }
+  const primary = url || fallbackUrl;
+  const backup  = (url && fallbackUrl && url!==fallbackUrl) ? fallbackUrl : null;
+  if (vid.getAttribute('data-cur')===primary) return;
+  vid.setAttribute('data-cur', primary);
+  msg.style.display='none';
+  function isHls(s){ return typeof s==='string' && s.indexOf('.m3u8')!==-1; }
+  function tryPlay(src, nextSrc) {
+    if (isHls(src) && typeof Hls!=='undefined' && Hls.isSupported()) {
+      if(window._hls){ window._hls.destroy(); window._hls=null; }
+      const h=new Hls({autoStartLoad:true,enableWorker:false});
+      h.loadSource(src); h.attachMedia(vid);
+      h.on(Hls.Events.MANIFEST_PARSED,function(){ if(!paused) vid.play().catch(function(){}); });
+      h.on(Hls.Events.ERROR,function(e,d){
+        if(d.fatal){ h.destroy(); window._hls=null;
+          if(nextSrc){ tryPlay(nextSrc,null); }
+          else { vid.src=src; vid.load(); if(!paused) vid.play().catch(function(){}); }
+        }
+      });
+      window._hls=h;
+    } else {
+      if(window._hls){ window._hls.destroy(); window._hls=null; }
+      vid.src=src; vid.load(); if(!paused) vid.play().catch(function(){});
+      vid.onerror=function(){ if(nextSrc){ vid.onerror=null; tryPlay(nextSrc,null); } };
+    }
+  }
+  tryPlay(primary, backup);
+}
+
+function setTopbar(block){
+  document.getElementById('tb-name').textContent=block.sectionName;
+  document.getElementById('tb-fmt').textContent=block.fmt||'';
+}
+
+function showAmrap(block) {
+  document.getElementById('ui-amrap').style.display='flex';
+  document.getElementById('ui-interval').style.display='none';
+  setTopbar(block);
+  let lbl;
+  if(block.type==='EMOM') {
+    lbl = (block.fmt||'EMOM')+' \\u00b7 MINUTO '+roundNum+' / '+block.totalRounds;
+  } else if(block.type==='CIRCUIT') {
+    lbl = 'ROUND '+roundNum+' / '+block.totalRounds+' \\u00b7 TEMPO RIMASTO';
+  } else if(block.type==='FOR_TIME') {
+    lbl = block.timeCap>0 ? 'FOR TIME \\u00b7 LIMITE '+fmtTime(block.timeCap) : 'FOR TIME \\u00b7 TEMPO TRASCORSO';
+  } else {
+    lbl = 'AMRAP \\u00b7 TEMPO RIMASTO';
+  }
+  document.getElementById('amrap-label').textContent=lbl;
+  const list=document.getElementById('amrap-list');
+  list.innerHTML=block.exercises.map(function(ex,i){
+    return '<div class="amrap-ex'+(i===0?' active':'')+'" id="amr-'+i+'">'+
+      '<span class="amrap-ex-name">'+ex.name.toUpperCase()+'</span>'+
+      '<span class="amrap-ex-reps">'+(ex.reps||'')+'</span></div>';
+  }).join('');
+  if(block.exercises[0]) loadVideo(block.exercises[0].videoUrl, block.exercises[0].videoUrlPermanent);
+  updateAmrapTimer(block);
+}
+
+function updateAmrapTimer(block) {
+  document.getElementById('amrap-countdown').textContent=fmtTime(secs);
+  const elapsed = block.totalTime - secs;
+  const cycleLen = 10;
+  if(!block.exercises.length) return;
+  const newIdx = Math.floor(elapsed / cycleLen) % block.exercises.length;
+  if (newIdx !== amrapCycleIdx) {
+    const oldEl=document.getElementById('amr-'+amrapCycleIdx);
+    if(oldEl) oldEl.classList.remove('active');
+    amrapCycleIdx=newIdx;
+    const newEl=document.getElementById('amr-'+amrapCycleIdx);
+    if(newEl) newEl.classList.add('active');
+    const ex=block.exercises[amrapCycleIdx];
+    if(ex && (ex.videoUrl||ex.videoUrlPermanent)) loadVideo(ex.videoUrl, ex.videoUrlPermanent);
+  }
+}
+
+function showInterval(block) {
+  document.getElementById('ui-amrap').style.display='none';
+  document.getElementById('ui-interval').style.display='flex';
+  setTopbar(block);
+  updateIntervalDisplay(block);
+}
+
+function updateIntervalDisplay(block) {
+  const isWork  = (state === 'WORK');
+  const curEx   = block.exercises[exIdx];
+  let nextIdx = exIdx + 1;
+  if (nextIdx >= block.exercises.length) nextIdx = 0;
+  const showEx = isWork ? curEx : block.exercises[nextIdx];
+  if(!showEx) return;
+  const nextBadge = document.getElementById('int-next-badge');
+  if (nextBadge) nextBadge.style.display = isWork ? 'none' : 'inline-block';
+  document.getElementById('int-pos').textContent=(globalExIdx+1)+' / '+globalFlat.length;
+  document.getElementById('int-exname').textContent=showEx.name.toUpperCase();
+  document.getElementById('int-label').textContent=isWork ? 'LAVORO' : 'RIPOSO';
+  document.getElementById('int-timer').textContent=fmtTime(secs);
+  document.getElementById('int-round').textContent = block.type==='TABATA'
+    ? 'ROUND '+exerciseRound+' / '+block.roundsPerExercise
+    : 'ROUND '+roundNum+' / '+block.totalRounds;
+  if (showEx.videoUrl || showEx.videoUrlPermanent) loadVideo(showEx.videoUrl, showEx.videoUrlPermanent);
+}
+
+function showDone() {
+  document.getElementById('tb-name').textContent='ALLENAMENTO COMPLETATO';
+  document.getElementById('tb-fmt').textContent='';
+  document.getElementById('ui-interval').style.display='none';
+  document.getElementById('ui-amrap').style.display='flex';
+  document.getElementById('amrap-label').textContent='GRANDE LAVORO!';
+  document.getElementById('amrap-countdown').textContent='00:00';
+  document.getElementById('amrap-list').innerHTML='';
+  loadVideo('');
+}
+
+function initBlock() {
+  const block=WORKOUT[blockIdx];
+  if(!block){ showDone(); return; }
+  exIdx=0; roundNum=1; amrapCycleIdx=0; exerciseRound=1;
+  if(block.type==='AMRAP'||block.type==='CIRCUIT'||block.type==='EMOM') {
+    state='AMRAP'; secs=block.totalTime;
+    showAmrap(block);
+  } else if(block.type==='FOR_TIME') {
+    state='AMRAP';
+    secs = block.timeCap > 0 ? block.timeCap : 0;
+    showAmrap(block);
+  } else if(block.type==='TABATA') {
+    state='WORK'; secs=block.workTime;
+    showInterval(block);
+    const il=document.getElementById('int-label'); if(il) il.textContent='TABATA';
+    const ir=document.getElementById('int-round'); if(ir) ir.textContent='ROUND 1 / '+block.roundsPerExercise;
+  } else {
+    state='WORK'; secs=block.workTime;
+    showInterval(block);
+  }
+  markCurrent();
+}
+
+function tick() {
+  if(paused) return;
+  const block=WORKOUT[blockIdx];
+  if(!block) return;
+  if(secs>0 || block.type==='FOR_TIME') {
+    if(block.type==='FOR_TIME' && block.timeCap===0) { secs++; updateAmrapTimer(block); return; }
+    if(secs<=0) { /* FOR TIME con cap arriva qui alla fine */ }
+    else secs--;
+    if(block.type==='AMRAP'||block.type==='CIRCUIT'||block.type==='EMOM'||block.type==='FOR_TIME') {
+      if(state==='AMRAP') updateAmrapTimer(block);
+      else {
+        { const el=document.getElementById('amrap-label'); if(el) el.textContent=(block.type==='EMOM'?((block.fmt||'EMOM')+' \\u00b7 MINUTO'):'RIPOSO \\u00b7 ROUND')+' '+roundNum+' / '+block.totalRounds+(block.type!=='EMOM'?' \\u00b7 TEMPO RIMASTO':''); }
+        document.getElementById('amrap-countdown').textContent=fmtTime(secs);
+      }
+    } else if(block.type==='TABATA') { updateIntervalDisplay(block); }
+    else { updateIntervalDisplay(block); }
+    if(secs>0 || (block.type==='FOR_TIME'&&block.timeCap===0)) return;
+  }
+  if(block.type==='AMRAP') {
+    blockIdx++; globalExIdx+=block.exercises.length;
+    if(blockIdx<WORKOUT.length) initBlock(); else showDone();
+    return;
+  }
+  if(block.type==='CIRCUIT'||block.type==='EMOM') {
+    if(state==='AMRAP') {
+      if(block.restTime>0 && roundNum<block.totalRounds) {
+        state='REST'; secs=block.restTime;
+        { const el=document.getElementById('amrap-label'); if(el) el.textContent=(block.type==='EMOM'?'EMOM \\u00b7 MINUTO':'RIPOSO \\u00b7 ROUND')+' '+roundNum+' / '+block.totalRounds+(block.type!=='EMOM'?' \\u00b7 TEMPO RIMASTO':''); }
+        document.getElementById('amrap-countdown').textContent=fmtTime(secs);
+        loadVideo('');
+      } else if(roundNum<block.totalRounds) {
+        roundNum++; state='AMRAP'; secs=block.totalTime; amrapCycleIdx=0;
+        showAmrap(block);
+      } else {
+        blockIdx++; globalExIdx+=block.exercises.length;
+        if(blockIdx<WORKOUT.length) initBlock(); else showDone();
+      }
+    } else {
+      roundNum++; state='AMRAP'; secs=block.totalTime; amrapCycleIdx=0;
+      showAmrap(block);
+    }
+    return;
+  }
+  if(block.type==='TABATA') {
+    if(state==='WORK') {
+      state='REST'; secs=block.restTime;
+      const il=document.getElementById('int-label'); if(il) il.textContent='RIPOSO';
+      document.getElementById('int-timer').textContent=fmtTime(secs);
+    } else {
+      exerciseRound++;
+      if(exerciseRound>block.roundsPerExercise) {
+        exerciseRound=1; exIdx++; globalExIdx++;
+        if(exIdx>=block.exercises.length) {
+          blockIdx++; if(blockIdx<WORKOUT.length) initBlock(); else showDone(); return;
+        }
+      }
+      state='WORK'; secs=block.workTime;
+      showInterval(block);
+      const il=document.getElementById('int-label'); if(il) il.textContent='TABATA';
+      const ir=document.getElementById('int-round'); if(ir) ir.textContent='ROUND '+exerciseRound+' / '+block.roundsPerExercise;
+      loadVideo(block.exercises[exIdx].videoUrl, block.exercises[exIdx].videoUrlPermanent);
+    }
+    return;
+  }
+  if(state==='WORK' && block.restTime>0) {
+    state='REST'; secs=block.restTime; updateIntervalDisplay(block);
+  } else {
+    exIdx++; globalExIdx++;
+    if(exIdx>=block.exercises.length) {
+      exIdx=0; roundNum++;
+      if(roundNum>block.totalRounds) {
+        blockIdx++;
+        if(blockIdx<WORKOUT.length) initBlock(); else showDone();
+        return;
+      }
+      globalExIdx-=block.exercises.length;
+    }
+    state='WORK'; secs=block.workTime;
+    updateIntervalDisplay(block);
+    loadVideo(block.exercises[exIdx].videoUrl, block.exercises[exIdx].videoUrlPermanent);
+  }
+}
+
+// ── Menu sezioni (drawer) ──
+const drawer=document.getElementById('drawer');
+const backdrop=document.getElementById('drawer-backdrop');
+function openDrawer(){ drawer.classList.add('open'); backdrop.classList.add('open'); markCurrent(); }
+function closeDrawer(){ drawer.classList.remove('open'); backdrop.classList.remove('open'); }
+function markCurrent(){
+  const items=document.querySelectorAll('.drawer-item');
+  for(let i=0;i<items.length;i++) items[i].classList.toggle('cur', i===blockIdx);
+}
+(function(){
+  const wrap=document.getElementById('drawer-items');
+  wrap.innerHTML=WORKOUT.map(function(b,i){
+    return '<button class="drawer-item" data-i="'+i+'">'+
+      '<span class="di-badge">'+pad(i+1)+'</span>'+
+      '<span class="di-name">'+b.sectionName+'</span>'+
+      '<span class="di-fmt">'+(b.fmt||'')+'</span></button>';
+  }).join('');
+  wrap.addEventListener('click',function(e){
+    let el=e.target;
+    while(el && !el.getAttribute('data-i')) el=el.parentElement;
+    if(!el) return;
+    jumpTo(parseInt(el.getAttribute('data-i'),10));
+  });
+  document.getElementById('menu-btn').addEventListener('click',openDrawer);
+  backdrop.addEventListener('click',closeDrawer);
+})();
+
+function jumpTo(i){
+  if(i<0||i>=WORKOUT.length) return;
+  blockIdx=i;
+  globalExIdx=0;
+  for(let k=0;k<i;k++) globalExIdx+=WORKOUT[k].exercises.length;
+  initBlock();
+  setPaused(false);
+  closeDrawer();
+}
+
+// ── Pausa / riprendi ──
+function setPaused(p){
+  paused=p;
+  document.getElementById('pause-flag').style.display=p?'block':'none';
+  document.getElementById('pause-btn').innerHTML=p?'&#9654;':'&#10074;&#10074;';
+  const vid=document.getElementById('ex-video');
+  if(vid){ if(p) vid.pause(); else if(vid.src) vid.play().catch(function(){}); }
+}
+document.getElementById('pause-btn').addEventListener('click',function(){ setPaused(!paused); });
+
+// ── Wake Lock: tieni lo schermo acceso durante il workout ──
+let wakeLock=null;
+function acquireWake(){
+  if(!('wakeLock' in navigator)) return;
+  navigator.wakeLock.request('screen').then(function(wl){ wakeLock=wl; }).catch(function(){});
+}
+document.addEventListener('visibilitychange',function(){ if(document.visibilityState==='visible') acquireWake(); });
+acquireWake();
+
+initBlock();
+setInterval(tick,1000);
+</script>
+</body></html>`;
+}
+
 // ─── Traduzione automatica EN→IT ─────────────────────────────────────────────
 
 async function translateToItalian(text) {
@@ -1243,8 +1696,30 @@ async function main() {
   console.log('Localizzazione video...');
   await localizeVideos(lesson, videoField);
 
-  // Step 6: Genera index.html (panoramica WOD)
-  const html = buildHtml(lesson, isoDate);
+  // Step 5c: Pagina mobile giornaliera con nome imprevedibile + QR
+  // Token = HMAC(data, HYROX_PASSWORD): stabile per tutto il giorno sui run
+  // multipli, ma non indovinabile dall'esterno. Cambia ogni giorno → il QR
+  // di ieri smette di funzionare.
+  const dayToken  = crypto.createHmac('sha256', PASSWORD || 'hyrox-wod-seed')
+                          .update(isoDate).digest('hex').slice(0, 12);
+  const M_DIR     = path.join(__dirname, 'm');
+  const mobileUrl = `https://planetfitness-mosciano.github.io/hyrox-wod/m/${dayToken}.html`;
+  if (!fs.existsSync(M_DIR)) fs.mkdirSync(M_DIR, { recursive: true });
+
+  let qrDataUrl = '';
+  try {
+    const QRCode = require('qrcode');
+    qrDataUrl = await QRCode.toDataURL(mobileUrl, {
+      width: 600, margin: 2, errorCorrectionLevel: 'M',
+      color: { dark: '#000000', light: '#ffffff' }
+    });
+    console.log(`✓ QR generato per ${mobileUrl}`);
+  } catch (e) {
+    console.warn('⚠ modulo qrcode non disponibile, index.html senza QR:', e.message);
+  }
+
+  // Step 6: Genera index.html (panoramica WOD + pannello QR alternato)
+  const html = buildHtml(lesson, isoDate, qrDataUrl);
   fs.writeFileSync(OUT, html, 'utf8');
   console.log(`✓ index.html generato (${html.length} bytes) → ${OUT}`);
 
@@ -1252,6 +1727,16 @@ async function main() {
   const timerHtml = buildTimerHtml(lesson, isoDate, videoField);
   fs.writeFileSync(TIMER_OUT, timerHtml, 'utf8');
   console.log(`✓ timer.html generato (${timerHtml.length} bytes) → ${TIMER_OUT}`);
+
+  // Step 7b: Genera la pagina mobile del giorno + prune di quelle vecchie
+  const mobileHtml = buildTimerMobileHtml(lesson, isoDate, videoField);
+  fs.writeFileSync(path.join(M_DIR, `${dayToken}.html`), mobileHtml, 'utf8');
+  for (const f of fs.readdirSync(M_DIR)) {
+    if (f.endsWith('.html') && f !== `${dayToken}.html`) {
+      try { fs.unlinkSync(path.join(M_DIR, f)); console.log(`  ✗ rimossa pagina mobile scaduta ${f}`); } catch {}
+    }
+  }
+  console.log(`✓ pagina mobile → m/${dayToken}.html (${mobileHtml.length} bytes)`);
   console.log('✓ debug-exercise-fields.txt scritto');
 }
 
