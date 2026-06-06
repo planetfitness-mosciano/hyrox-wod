@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- generated:2026-06-06T13:15:05.145Z -->
+<!-- generated:2026-06-06T13:35:29.615Z -->
 <html lang="it"><head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
@@ -65,6 +65,8 @@ video.ex-video{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:
     <div class="bar-accent"></div>
     <button class="icon-btn" id="menu-btn" aria-label="Menu">&#9776;</button>
     <div class="tb-title"><span class="tb-name" id="tb-name">&mdash;</span><span class="tb-fmt" id="tb-fmt"></span></div>
+    <button class="icon-btn" id="snd-btn" aria-label="Audio">&#128266;</button>
+    <button class="icon-btn" id="fs-btn" aria-label="Schermo intero">&#x2922;</button>
     <button class="icon-btn" id="pause-btn" aria-label="Pausa">&#10074;&#10074;</button>
   </div>
   <div class="main">
@@ -257,8 +259,7 @@ function initBlock() {
   markCurrent();
 }
 
-function tick() {
-  if(paused) return;
+function tickCore() {
   const block=WORKOUT[blockIdx];
   if(!block) return;
   if(secs>0 || block.type==='FOR_TIME') {
@@ -339,6 +340,75 @@ function tick() {
     loadVideo(block.exercises[exIdx].videoUrl, block.exercises[exIdx].videoUrlPermanent);
   }
 }
+
+// ── Audio: beep di start/stop via Web Audio (nessun file, oscillatore) ──
+let actx=null, soundOn=true;
+function ensureAudio(){
+  try{
+    if(!actx && (window.AudioContext||window.webkitAudioContext)) actx=new (window.AudioContext||window.webkitAudioContext)();
+    if(actx && actx.state==='suspended') actx.resume();
+  }catch(e){}
+}
+function beep(freq,dur,when,vol){
+  if(!actx || !soundOn) return;
+  try{
+    const t=actx.currentTime+(when||0);
+    const o=actx.createOscillator(), g=actx.createGain();
+    o.type='square'; o.frequency.value=freq;
+    g.gain.setValueAtTime(0.0001,t);
+    g.gain.exponentialRampToValueAtTime(vol||0.5,t+0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+    o.connect(g); g.connect(actx.destination);
+    o.start(t); o.stop(t+dur+0.05);
+  }catch(e){}
+}
+function beepCountdown(){ beep(880,0.12); }                      // 3-2-1
+function beepWork(){ beep(1320,0.15,0); beep(1320,0.4,0.2); }    // doppio acuto: VIA
+function beepRest(){ beep(520,0.45); }                           // grave: stop/riposo
+
+// tick = wrapper di tickCore: rileva i cambi di fase e suona i beep
+function tick(){
+  if(paused) return;
+  const pre = state+'|'+blockIdx+'|'+exIdx+'|'+roundNum+'|'+exerciseRound;
+  tickCore();
+  const post = state+'|'+blockIdx+'|'+exIdx+'|'+roundNum+'|'+exerciseRound;
+  if(pre!==post){
+    if(blockIdx>=WORKOUT.length || state==='REST'){ beepRest(); }
+    else { beepWork(); }
+  } else if(secs>0 && secs<=3){
+    const b=WORKOUT[blockIdx];
+    if(b && !(b.type==='FOR_TIME' && b.timeCap===0)) beepCountdown();
+  }
+}
+
+document.getElementById('snd-btn').addEventListener('click',function(){
+  soundOn=!soundOn; ensureAudio();
+  this.innerHTML=soundOn?'&#128266;':'&#128263;';
+});
+
+// ── Schermo intero (Android; su iPhone Safari l'API non è permessa da Apple) ──
+function toggleFs(){
+  const d=document.documentElement;
+  const isFs=document.fullscreenElement||document.webkitFullscreenElement;
+  try{
+    if(!isFs){ (d.requestFullscreen||d.webkitRequestFullscreen||function(){}).call(d); }
+    else { (document.exitFullscreen||document.webkitExitFullscreen||function(){}).call(document); }
+  }catch(e){}
+}
+document.getElementById('fs-btn').addEventListener('click',function(){ ensureAudio(); toggleFs(); });
+
+// Primo tocco ovunque: sblocca l'audio e prova il fullscreen automatico
+let firstGesture=false;
+function onFirstGesture(){
+  ensureAudio();
+  if(!firstGesture){
+    firstGesture=true;
+    const d=document.documentElement;
+    try{ if(d.requestFullscreen){ const p=d.requestFullscreen(); if(p&&p.catch) p.catch(function(){}); } }catch(e){}
+  }
+}
+document.addEventListener('click',onFirstGesture,true);
+document.addEventListener('touchend',onFirstGesture,true);
 
 // ── Menu sezioni (drawer) ──
 const drawer=document.getElementById('drawer');
