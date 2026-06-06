@@ -56,8 +56,8 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          mkdir -p videos
-          git add -A index.html timer.html debug-exercise-fields.txt hls.min.js videos
+          mkdir -p videos m
+          git add -A index.html timer.html debug-exercise-fields.txt hls.min.js videos m
           git diff --cached --quiet && echo "Nessuna modifica." || \
             git commit -m "chore: WOD aggiornato $(date -u +'%Y-%m-%d %H:%M') UTC"
           git push
