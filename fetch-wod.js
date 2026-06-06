@@ -1011,11 +1011,16 @@ video.ex-video{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:
 .di-name{flex:1;font-weight:700;font-size:16px;letter-spacing:.05em;text-transform:uppercase}
 .di-fmt{font-weight:600;font-size:11px;letter-spacing:.15em;color:rgba(255,229,0,.8);text-transform:uppercase;flex-shrink:0}
 .drawer-foot{margin-top:auto;padding:14px 16px 4px;font-size:11px;letter-spacing:.15em;color:rgba(255,255,255,.4);text-transform:uppercase}
-.rotate-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#000;z-index:100;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;padding:24px}
-.rotate-icon{font-size:54px}
-.rotate-msg{font-weight:800;font-size:24px;letter-spacing:.1em;text-transform:uppercase}
-.rotate-sub{font-size:14px;color:rgba(255,255,255,.6);letter-spacing:.08em}
-@media (orientation: portrait){ .rotate-overlay{display:flex} }
+/* ── Portrait: layout impilato — video sopra (i clip HYROX sono verticali), timer sotto ── */
+@media (orientation: portrait){
+  .main{flex-direction:column-reverse}
+  .info{width:100%;min-width:0;flex:0 0 57%;border-right:none;border-top:1px solid rgba(255,255,255,.18);padding:10px 14px}
+  .video-wrap{flex:1 1 auto;min-height:0}
+  .amrap-countdown{font-size:12vh}
+  .int-exname{font-size:5vh;padding-bottom:4px}
+  .int-label{font-size:2.6vh}
+  .int-timer{font-size:11vh}
+}
 </style>
 </head>
 <body>
@@ -1056,11 +1061,6 @@ video.ex-video{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:
   <div class="drawer-hd">Fasi allenamento</div>
   <div id="drawer-items"></div>
   <div class="drawer-foot">Planet Fitness &middot; Mosciano S.A.<br>${esc(dateStr)}</div>
-</div>
-<div class="rotate-overlay">
-  <div class="rotate-icon">&#128241;</div>
-  <div class="rotate-msg">Ruota il telefono</div>
-  <div class="rotate-sub">Questo allenamento si usa in orizzontale</div>
 </div>
 <script>
 const WORKOUT = ${workoutJson};
