@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- generated:2026-06-06T13:35:29.615Z -->
+<!-- generated:2026-06-06T14:09:29.950Z -->
 <html lang="it"><head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
@@ -52,11 +52,16 @@ video.ex-video{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:
 .di-name{flex:1;font-weight:700;font-size:16px;letter-spacing:.05em;text-transform:uppercase}
 .di-fmt{font-weight:600;font-size:11px;letter-spacing:.15em;color:rgba(255,229,0,.8);text-transform:uppercase;flex-shrink:0}
 .drawer-foot{margin-top:auto;padding:14px 16px 4px;font-size:11px;letter-spacing:.15em;color:rgba(255,255,255,.4);text-transform:uppercase}
-.rotate-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#000;z-index:100;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;padding:24px}
-.rotate-icon{font-size:54px}
-.rotate-msg{font-weight:800;font-size:24px;letter-spacing:.1em;text-transform:uppercase}
-.rotate-sub{font-size:14px;color:rgba(255,255,255,.6);letter-spacing:.08em}
-@media (orientation: portrait){ .rotate-overlay{display:flex} }
+/* ── Portrait: layout impilato — video sopra (i clip HYROX sono verticali), timer sotto ── */
+@media (orientation: portrait){
+  .main{flex-direction:column-reverse}
+  .info{width:100%;min-width:0;flex:0 0 57%;border-right:none;border-top:1px solid rgba(255,255,255,.18);padding:10px 14px}
+  .video-wrap{flex:1 1 auto;min-height:0}
+  .amrap-countdown{font-size:12vh}
+  .int-exname{font-size:5vh;padding-bottom:4px}
+  .int-label{font-size:2.6vh}
+  .int-timer{font-size:11vh}
+}
 </style>
 </head>
 <body>
@@ -97,11 +102,6 @@ video.ex-video{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:
   <div class="drawer-hd">Fasi allenamento</div>
   <div id="drawer-items"></div>
   <div class="drawer-foot">Planet Fitness &middot; Mosciano S.A.<br>SABATO 6 GIUGNO 2026</div>
-</div>
-<div class="rotate-overlay">
-  <div class="rotate-icon">&#128241;</div>
-  <div class="rotate-msg">Ruota il telefono</div>
-  <div class="rotate-sub">Questo allenamento si usa in orizzontale</div>
 </div>
 <script>
 const WORKOUT = [{"type":"AMRAP","fmt":"AMRAP","sectionName":"Warm up","sectionSchema":"240s lavoro · 0s riposo · 1 round · 4min","totalTime":240,"restTime":0,"totalRounds":1,"exercises":[{"name":"Cat-Cow","reps":"4 reps","videoUrl":"../videos/f4vz7US5tMNkBHwGPtqUHo.mp4","videoUrlPermanent":""},{"name":"Situp to Glute Bridges","reps":"6 reps","videoUrl":"../videos/wPBa297QaspPJ5QxiYiCin.mp4","videoUrlPermanent":""},{"name":"Runner's Lunge","reps":"6 reps","videoUrl":"../videos/jheSQTRhHLVx5sBLCupHEu.mp4","videoUrlPermanent":""},{"name":"Wide to Narrow Pushups","reps":"8 reps","videoUrl":"../videos/aHd2MA438eEG1ADwUtpgwB.mp4","videoUrlPermanent":""}]},{"type":"INTERVAL","fmt":"INTERVAL","sectionName":"Full Body Intervals ","sectionSchema":"40s lavoro · 20s riposo · 20 rounds · 20min","workTime":40,"restTime":20,"totalRounds":20,"exercises":[{"name":"DB Squat Cleans","rpe":null,"videoUrl":"../videos/6FTHnwHdwEbcu7f6fF7LAg.mp4","videoUrlPermanent":""},{"name":"DB Thrusters","rpe":null,"videoUrl":"../videos/bkjoyMKSWPdxsvYkN9GDod.mp4","videoUrlPermanent":""},{"name":"Hollow Body Flutter Kicks","rpe":null,"videoUrl":"../videos/aKtDjqtSTCiQkAJJeLownj.mp4","videoUrlPermanent":""},{"name":"DB Renegade Row","rpe":null,"videoUrl":"../videos/7wBGkdJsQkQDd722tDf8xe.mp4","videoUrlPermanent":""},{"name":"Knee Tuck Push-ups","rpe":null,"videoUrl":"../videos/k1ABZ1omY1iXbvPAQFgnJA.mp4","videoUrlPermanent":""}]},{"type":"CIRCUIT","fmt":"CIRCUIT","sectionName":"Leg Strength","sectionSchema":"480s lavoro · 120s riposo · 2 rounds · 20min","totalTime":480,"restTime":120,"totalRounds":2,"exercises":[{"name":"DB 1 Arm Row","reps":"8 reps","videoUrl":"../videos/4SLhJ7273Ni2tH3hwEELTk.mp4","videoUrlPermanent":""},{"name":"DB 1 Arm Push Press","reps":"8 reps","videoUrl":"../videos/6AWSFcZCsaczVFQKVdbnHg.mp4","videoUrlPermanent":""},{"name":"DB 1 Arm Row","reps":"8 reps","videoUrl":"../videos/4SLhJ7273Ni2tH3hwEELTk.mp4","videoUrlPermanent":""},{"name":"DB 1 Arm Push Press","reps":"8 reps","videoUrl":"../videos/6AWSFcZCsaczVFQKVdbnHg.mp4","videoUrlPermanent":""}]},{"type":"FOR_TIME","fmt":"FOR TIME","sectionName":"Post Workout Stretch/Mobility","sectionSchema":"1 round · 5min","timeCap":0,"exercises":[]}];
