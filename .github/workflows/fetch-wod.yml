@@ -38,6 +38,9 @@ jobs:
       - name: Install Chromium for Puppeteer
         run: npx puppeteer browsers install chrome
 
+      - name: Install ffmpeg (ricodifica video)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+
       - name: Fetch WOD and generate index.html + timer.html
         env:
           HYROX_EMAIL:    ${{ secrets.HYROX_EMAIL }}
