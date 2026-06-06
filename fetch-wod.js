@@ -685,6 +685,27 @@ let blockIdx = 0, state = 'INIT', secs = 0;
 let exIdx = 0, roundNum = 1, amrapCycleIdx = 0;
 let exerciseRound = 1;  // per TABATA: round corrente sull'esercizio attuale
 
+// Cache locale dei video (blob in RAM) + prefetch in background:
+// scarica tutti i video del giorno una volta sola, poi zero rete.
+const videoCache = {};
+(function(){
+  const seen={}, urls=[];
+  WORKOUT.forEach(b => b.exercises.forEach(ex => {
+    const u=ex.videoUrl||ex.videoUrlPermanent;
+    if(u && u.indexOf('.m3u8')===-1 && !seen[u]){ seen[u]=1; urls.push(u); }
+  }));
+  let i=0;
+  function next(){
+    if(i>=urls.length) return;
+    const u=urls[i++];
+    if(videoCache[u]){ next(); return; }
+    fetch(u).then(r => { if(!r.ok) throw new Error('http '+r.status); return r.blob(); })
+      .then(b => { try{ videoCache[u]=URL.createObjectURL(b); }catch(e){} next(); })
+      .catch(() => setTimeout(next, 800));
+  }
+  setTimeout(next, 1200);
+})();
+
 // Lista flat di tutti gli esercizi unici per contatore X/Y
 const globalFlat = [];
 WORKOUT.forEach(b => b.exercises.forEach(ex => globalFlat.push(ex)));
@@ -725,7 +746,7 @@ function loadVideo(url, fallbackUrl) {
       window._hls=h;
     } else {
       if(window._hls){ window._hls.destroy(); window._hls=null; }
-      vid.src=src; vid.load(); vid.play().catch(()=>{});
+      vid.src=videoCache[src]||src; vid.load(); vid.play().catch(()=>{});
       vid.onerror=()=>{ if(nextSrc){ vid.onerror=null; tryPlay(nextSrc,null); } };
     }
   }
