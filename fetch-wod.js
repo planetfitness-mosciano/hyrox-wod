@@ -1800,7 +1800,8 @@ async function localizeVideos(lesson, videoField) {
                 fs.renameSync(tmp, dest); // ricodifica inutile/peggiore: tieni l'originale
               }
             } catch (e) {
-              fs.renameSync(tmp, dest);   // ffmpeg assente o errore: tieni l'originale
+              console.warn(`  ⚠ ffmpeg non disponibile o errore su ${base}: ${e.message} — tengo l'originale`);
+              fs.renameSync(tmp, dest);
             }
             downloaded++;
             const finalMB = (fs.statSync(dest).size / 1048576).toFixed(1);
