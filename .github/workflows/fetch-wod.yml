@@ -2,12 +2,14 @@ name: Fetch WOD
 
 on:
   schedule:
-    - cron: '0 3 * * *'
-    - cron: '0 7 * * *'
-    - cron: '0 10 * * *'
-    - cron: '0 13 * * *'
-    - cron: '0 16 * * *'
-    - cron: '0 18 * * *'
+    # Minuto 17 e non 0: i job al minuto 0 sono i più ritardati/scartati da GitHub
+    - cron: '17 3 * * *'   # 05:17 IT (estate) — WOD del giorno
+    - cron: '47 4 * * *'   # 06:47 IT — recupero se il primo salta
+    - cron: '17 7 * * *'   # 09:17 IT
+    - cron: '17 10 * * *'  # 12:17 IT
+    - cron: '17 13 * * *'  # 15:17 IT
+    - cron: '17 16 * * *'  # 18:17 IT
+    - cron: '17 18 * * *'  # 20:17 IT
   workflow_dispatch: {}
 
 jobs:
