@@ -570,8 +570,23 @@ function buildWorkoutData(lesson, videoField) {
         }))
       });
     } else {
-      // INTERVAL: timer breve per singolo esercizio (workTime < 120s)
+      // INTERVAL: rotazione a STAZIONI. Una stazione = una zona (gruppo) se ci sono
+      // più gruppi; altrimenti = un singolo esercizio del gruppo unico (es. warm-up).
+      // Intervalli totali = rounds; la stazione i-esima è steps[i % nStazioni].
       const exWork = wt > 0 ? wt : Math.floor((s.duration || 40 * allEx.length) / Math.max(allEx.length, 1));
+      const groups = (s.sectionExerciseGroups || []).filter(g => g.sectionExercises && g.sectionExercises.length > 0);
+      function exObj(ex){ return {
+        name: ex.exercise.name, metric: getRepStr(ex), rpe: ex.rpe || null,
+        videoUrl: getVid(ex), videoUrlPermanent: getVidPermanent(ex), weight: getWeightStr(ex)
+      }; }
+      let steps;
+      if (groups.length > 1) {
+        steps = groups.map(g => ({ exercises: g.sectionExercises.map(exObj) }));
+      } else {
+        const g = groups[0] || { sectionExercises: [] };
+        steps = g.sectionExercises.map(ex => ({ exercises: [exObj(ex)] }));
+      }
+      if (!steps.length) steps = [{ exercises: [] }];
       WORKOUT.push({
         type: 'INTERVAL',
         fmt,
@@ -580,7 +595,9 @@ function buildWorkoutData(lesson, videoField) {
         workTime: exWork,
         restTime: rt,
         totalRounds: rounds,
-        exercises: allEx.map(ex => ({
+        steps: steps,
+        intervals: rounds && rounds > 0 ? rounds : steps.length,  // intervalli totali
+        exercises: allEx.map(ex => ({                              // (compat TV)
           name: ex.exercise.name,
           rpe: ex.rpe || null,
           videoUrl: getVid(ex),
@@ -1074,7 +1091,13 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;color:#fff;font
 #ui-interval{display:none;flex-direction:column;flex:1;overflow:hidden}
 .int-pos{font-weight:300;font-size:13px;letter-spacing:.18em;color:rgba(255,255,255,.6)}
 .int-next-badge{display:inline-block;align-self:flex-start;font-weight:900;font-size:11px;letter-spacing:.3em;color:#000;background:#FFE500;border-radius:3px;padding:2px 8px;text-transform:uppercase;margin:4px 0}
-.int-exname{font-weight:900;font-size:7.5vh;line-height:.9;text-transform:uppercase;color:#fff;flex:1;display:flex;align-items:flex-end;overflow:hidden;padding-bottom:6px}
+.int-exname{font-weight:900;font-size:7.5vh;line-height:.9;text-transform:uppercase;color:#fff;flex:1;display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;-webkit-justify-content:flex-end;justify-content:flex-end;-webkit-align-items:flex-start;align-items:flex-start;overflow:hidden;padding-bottom:6px}
+.int-exname.multi{gap:12px}
+.ivx{display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column}
+.ivx-n{font-weight:900;font-size:6.6vh;line-height:.95;color:#fff}
+.int-exname.multi .ivx-n{font-size:4.4vh}
+.ivx-m{font-weight:800;font-size:2.3vh;letter-spacing:.05em;color:#FFE500;margin-top:3px}
+.int-exname.multi .ivx-m{font-size:2vh}
 .int-label{font-weight:900;font-size:4vh;letter-spacing:.25em;color:#FFE500;text-transform:uppercase;line-height:1}
 .int-weight{font-weight:800;font-size:18px;letter-spacing:.12em;color:#FFE500;text-transform:uppercase;margin-bottom:4px}
 .int-timer{font-weight:200;font-size:15vh;line-height:1;color:#fff}
@@ -1121,6 +1144,10 @@ video.ex-video{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:
   .video-wrap{flex:1 1 auto;min-height:0}
   .amrap-countdown{font-size:10vh}
   .int-exname{font-size:4.2vh;padding-bottom:4px}
+  .ivx-n{font-size:4vh}
+  .int-exname.multi .ivx-n{font-size:3vh}
+  .ivx-m{font-size:1.8vh}
+  .int-exname.multi .ivx-m{font-size:1.6vh}
   .int-label{font-size:2.4vh}
   .int-timer{font-size:9vh}
 }
@@ -1295,7 +1322,33 @@ function showInterval(block) {
   updateIntervalDisplay(block);
 }
 
+function curStationFirstName(block){
+  if(block.type==='INTERVAL' && block.steps){ const st=block.steps[exIdx % block.steps.length]; return (st&&st.exercises[0])?st.exercises[0].name:''; }
+  const ex=block.exercises[exIdx]; return ex?ex.name:'';
+}
+// INTERVAL = rotazione a stazioni: mostra TUTTI gli esercizi della stazione (con reps/RPE/peso)
+function renderInterval(block){
+  const isWork=(state==='WORK');
+  const n=block.steps.length;
+  const st = isWork ? block.steps[exIdx % n] : block.steps[(exIdx+1) % n];
+  if(!st) return;
+  const nb=document.getElementById('int-next-badge'); if(nb) nb.style.display=isWork?'none':'inline-block';
+  document.getElementById('int-pos').textContent='INTERVALLO '+(exIdx+1)+' / '+block.intervals;
+  const exEl=document.getElementById('int-exname');
+  exEl.classList.toggle('multi', st.exercises.length>1);
+  exEl.innerHTML = st.exercises.map(function(e){
+    const meta=[(e.metric && e.metric!=='\\u2014')?e.metric:'', e.rpe?('RPE '+e.rpe):'', e.weight||''].filter(Boolean).join(' \\u00b7 ');
+    return '<div class="ivx"><div class="ivx-n">'+e.name.toUpperCase()+'</div>'+(meta?'<div class="ivx-m">'+meta+'</div>':'')+'</div>';
+  }).join('');
+  const iw=document.getElementById('int-weight'); if(iw) iw.style.display='none';
+  document.getElementById('int-label').textContent=isWork?'LAVORO':'RIPOSO';
+  document.getElementById('int-timer').textContent=fmtTime(secs);
+  document.getElementById('int-round').textContent='ROUND '+(exIdx+1)+' / '+block.intervals;
+  const fe=st.exercises[0]; if(fe && (fe.videoUrl||fe.videoUrlPermanent)) loadVideo(fe.videoUrl, fe.videoUrlPermanent);
+}
 function updateIntervalDisplay(block) {
+  if(block.type==='INTERVAL' && block.steps){ renderInterval(block); return; }
+  // ── TABATA: singolo esercizio per stazione ──
   const isWork  = (state === 'WORK');
   const curEx   = block.exercises[exIdx];
   let nextIdx = exIdx + 1;
@@ -1305,13 +1358,11 @@ function updateIntervalDisplay(block) {
   const nextBadge = document.getElementById('int-next-badge');
   if (nextBadge) nextBadge.style.display = isWork ? 'none' : 'inline-block';
   document.getElementById('int-pos').textContent=(globalExIdx+1)+' / '+globalFlat.length;
-  document.getElementById('int-exname').textContent=showEx.name.toUpperCase();
+  const exEl=document.getElementById('int-exname'); exEl.classList.remove('multi'); exEl.textContent=showEx.name.toUpperCase();
   const iw=document.getElementById('int-weight'); if(iw){ iw.textContent=showEx.weight?('PESO '+showEx.weight):''; iw.style.display=showEx.weight?'block':'none'; }
   document.getElementById('int-label').textContent=isWork ? 'LAVORO' : 'RIPOSO';
   document.getElementById('int-timer').textContent=fmtTime(secs);
-  document.getElementById('int-round').textContent = block.type==='TABATA'
-    ? 'ROUND '+exerciseRound+' / '+block.roundsPerExercise
-    : 'ROUND '+roundNum+' / '+block.totalRounds;
+  document.getElementById('int-round').textContent='ROUND '+exerciseRound+' / '+block.roundsPerExercise;
   if (showEx.videoUrl || showEx.videoUrlPermanent) loadVideo(showEx.videoUrl, showEx.videoUrlPermanent);
 }
 
@@ -1438,22 +1489,19 @@ function tickCore() {
     }
     return;
   }
+  // INTERVAL: exIdx = indice intervallo (0-based); fine a block.intervals
   if(state==='WORK' && block.restTime>0) {
     state='REST'; secs=block.restTime; updateIntervalDisplay(block);
   } else {
     exIdx++; globalExIdx++;
-    if(exIdx>=block.exercises.length) {
-      exIdx=0; roundNum++;
-      if(roundNum>block.totalRounds) {
-        blockIdx++;
-        if(blockIdx<WORKOUT.length) initBlock(); else showDone();
-        return;
-      }
-      globalExIdx-=block.exercises.length;
+    const tot=block.intervals||(block.steps?block.steps.length:block.exercises.length);
+    if(exIdx>=tot) {
+      blockIdx++;
+      if(blockIdx<WORKOUT.length) initBlock(); else showDone();
+      return;
     }
     state='WORK'; secs=block.workTime;
-    updateIntervalDisplay(block);
-    loadVideo(block.exercises[exIdx].videoUrl, block.exercises[exIdx].videoUrlPermanent);
+    updateIntervalDisplay(block);  // carica già il video della stazione corrente
   }
 }
 
@@ -1511,9 +1559,9 @@ function announceTransition(preBlock){
   if(!block){ speak('Allenamento completato','it'); return; }
   if(blockIdx!==preBlock) speak(block.sectionName,'it');      // nuova sezione
   if(state==='REST'){ speak('riposo','it'); return; }
-  if(block.type==='INTERVAL'||block.type==='TABATA'){          // fase a esercizio singolo
-    const ex=block.exercises[exIdx];
-    if(ex) speak(ex.name,'en');
+  if(block.type==='INTERVAL'||block.type==='TABATA'){          // fase a esercizio/stazione
+    const nm=curStationFirstName(block);
+    if(nm) speak(nm,'en');
   }
 }
 
@@ -1540,7 +1588,7 @@ document.getElementById('ready-play').addEventListener('click',function(){
   beginBlock();
   beepWork();
   const b=WORKOUT[blockIdx];
-  if(b){ if(b.type==='INTERVAL'||b.type==='TABATA'){ const ex=b.exercises[exIdx]; if(ex) speak(ex.name,'en'); } else { speak(b.sectionName,'it'); } }
+  if(b){ if(b.type==='INTERVAL'||b.type==='TABATA'){ const nm=curStationFirstName(b); if(nm) speak(nm,'en'); } else { speak(b.sectionName,'it'); } }
 });
 
 document.getElementById('snd-btn').addEventListener('click',function(){
@@ -1551,7 +1599,7 @@ document.getElementById('snd-btn').addEventListener('click',function(){
 document.getElementById('voice-btn').addEventListener('click',function(){
   voiceOn=!voiceOn;
   this.style.opacity=voiceOn?'1':'0.4';
-  if(voiceOn){ const b=WORKOUT[blockIdx]; if(b){ if(b.type==='INTERVAL'||b.type==='TABATA'){ const ex=b.exercises[exIdx]; if(ex) speak(ex.name,'en'); } else { speak(b.sectionName,'it'); } } }
+  if(voiceOn){ const b=WORKOUT[blockIdx]; if(b){ if(b.type==='INTERVAL'||b.type==='TABATA'){ const nm=curStationFirstName(b); if(nm) speak(nm,'en'); } else { speak(b.sectionName,'it'); } } }
   else { try{ speechSynthesis.cancel(); }catch(e){} }
 });
 
@@ -1580,7 +1628,7 @@ function onFirstGesture(){
     // annuncia subito l'esercizio/sezione corrente (la voce si sblocca col gesto)
     try{
       const b=WORKOUT[blockIdx];
-      if(b){ if(b.type==='INTERVAL'||b.type==='TABATA'){ const ex=b.exercises[exIdx]; if(ex) speak(ex.name,'en'); } else { speak(b.sectionName,'it'); } }
+      if(b){ if(b.type==='INTERVAL'||b.type==='TABATA'){ const nm=curStationFirstName(b); if(nm) speak(nm,'en'); } else { speak(b.sectionName,'it'); } }
     }catch(e){}
   }
 }
