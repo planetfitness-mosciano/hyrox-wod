@@ -548,7 +548,7 @@ function buildWorkoutData(lesson, videoField) {
 }
 
 // ─── Timer HTML generation ────────────────────────────────────────────────────
-function buildTimerHtml(lesson, isoDate, videoField) {
+function buildTimerHtml(lesson, isoDate, videoField, qrDataUrl) {
   const dateStr = italianDate(isoDate);
   const { WORKOUT, globalTotal } = buildWorkoutData(lesson, videoField);
   const workoutJson  = JSON.stringify(WORKOUT);
@@ -616,6 +616,10 @@ html,body{width:1920px;height:1080px;overflow:hidden;background:#000;color:#fff;
 video.ex-video{position:absolute;top:0;left:0;right:0;bottom:0;width:100%;height:100%;-o-object-fit:contain;object-fit:contain;z-index:1;background:#000}
 .video-overlay{position:absolute;top:0;left:0;right:0;bottom:0;background:-webkit-linear-gradient(left,rgba(0,0,0,.5) 0%,transparent 55%);background:linear-gradient(to right,rgba(0,0,0,.5) 0%,transparent 55%);z-index:2;pointer-events:none}
 .loading-msg{position:absolute;top:0;left:0;right:0;bottom:0;display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;-webkit-justify-content:center;justify-content:center;font-size:22px;letter-spacing:.18em;color:rgba(255,255,255,.3);z-index:3;background:#000}
+.qr-corner{position:absolute;right:28px;bottom:28px;z-index:4;display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;gap:16px;background:rgba(0,0,0,.78);border:2px solid #FFE500;border-radius:12px;padding:14px 18px}
+.qr-corner-cta{font-weight:900;font-size:22px;line-height:1.05;letter-spacing:.04em;color:#FFE500;text-transform:uppercase;text-align:right}
+.qr-corner-box{background:#000;line-height:0;-webkit-flex-shrink:0;flex-shrink:0}
+.qr-corner-img{width:150px;height:150px;display:block}
 </style>
 </head>
 <body>
@@ -677,6 +681,10 @@ video.ex-video{position:absolute;top:0;left:0;right:0;bottom:0;width:100%;height
     <div class="loading-msg" id="loading-msg">Caricamento video...</div>
     <video class="ex-video" id="ex-video" autoplay muted loop playsinline></video>
     <div class="video-overlay"></div>
+    ${qrDataUrl ? `<div class="qr-corner">
+      <div class="qr-corner-cta">Allenati<br>col telefono</div>
+      <div class="qr-corner-box"><img class="qr-corner-img" src="${qrDataUrl}" alt="QR allenamento"></div>
+    </div>` : ''}
   </div>
 </div>
 <script>
@@ -1890,7 +1898,7 @@ async function main() {
   console.log(`✓ index.html generato (${html.length} bytes) → ${OUT}`);
 
   // Step 7: Genera timer.html (display timer con video esercizi)
-  const timerHtml = buildTimerHtml(lesson, isoDate, videoField);
+  const timerHtml = buildTimerHtml(lesson, isoDate, videoField, qrDataUrl);
   fs.writeFileSync(TIMER_OUT, timerHtml, 'utf8');
   console.log(`✓ timer.html generato (${timerHtml.length} bytes) → ${TIMER_OUT}`);
 
