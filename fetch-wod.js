@@ -666,7 +666,15 @@ html,body{width:1920px;height:1080px;overflow:hidden;background:#000;color:#fff;
 .int-inner{display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;-webkit-flex:1;flex:1;padding:12px 36px 0;overflow:hidden}
 .int-pos{font-weight:300;font-size:24px;letter-spacing:.18em;color:rgba(255,255,255,.6);margin-bottom:6px}
 .int-next-badge{display:inline-block;font-weight:900;font-size:16px;letter-spacing:.35em;color:#000;background:#FFE500;border-radius:3px;padding:4px 14px;text-transform:uppercase;margin-bottom:8px}
-.int-exname{font-weight:900;font-size:92px;line-height:.88;letter-spacing:-.02em;text-transform:uppercase;color:#fff;overflow:hidden;-webkit-flex:1;flex:1;display:-webkit-flex;display:flex;-webkit-align-items:flex-end;align-items:flex-end;padding-bottom:12px}
+.int-exname{font-weight:900;font-size:92px;line-height:.88;letter-spacing:-.02em;text-transform:uppercase;color:#fff;overflow:hidden;-webkit-flex:1;flex:1;display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;-webkit-justify-content:flex-end;justify-content:flex-end;-webkit-align-items:flex-start;align-items:flex-start;padding-bottom:12px}
+.int-exname.multi{gap:18px}
+.ivx{display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column}
+.ivx-n{font-weight:900;font-size:84px;line-height:.9;color:#fff}
+.int-exname.multi .ivx-n{font-size:54px}
+.ivx-m{font-weight:800;font-size:30px;letter-spacing:.04em;color:#FFE500;margin-top:6px}
+.int-exname.multi .ivx-m{font-size:26px}
+.int-exname.multi .ivx{opacity:.4;-webkit-transition:opacity .3s;transition:opacity .3s}
+.int-exname.multi .ivx.active{opacity:1}
 .int-timer-block{display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;gap:4px;padding-bottom:10px}
 .int-label{font-weight:900;font-size:46px;letter-spacing:.30em;color:#FFE500;text-transform:uppercase;line-height:1}
 .int-timer{font-weight:200;font-size:124px;letter-spacing:.03em;color:#fff;line-height:1}
@@ -883,37 +891,63 @@ function showInterval(block) {
   updateIntervalDisplay(block);
 }
 
+// INTERVAL a STAZIONI: mostra tutti gli esercizi della stazione; se multi, il video cicla (~8s)
+let _intKey=null,_intCyc=-1;
+function renderInterval(block){
+  const isWork=(state==='WORK');
+  const n=block.steps.length;
+  const stIdx = isWork ? (exIdx % n) : ((exIdx+1) % n);
+  const st = block.steps[stIdx];
+  if(!st) return;
+  const key=stIdx+'|'+(isWork?'W':'R');
+  const exEl=document.getElementById('int-exname');
+  if(_intKey!==key){
+    _intKey=key; _intCyc=-1;
+    const nb=document.getElementById('int-next-badge'); if(nb) nb.style.display=isWork?'none':'inline-block';
+    document.getElementById('int-pos').textContent='INTERVALLO '+(exIdx+1)+' / '+block.intervals;
+    exEl.classList.toggle('multi', st.exercises.length>1);
+    exEl.innerHTML=st.exercises.map(function(e,i){
+      const meta=[(e.metric && e.metric!=='\\u2014')?e.metric:'', e.rpe?('RPE '+e.rpe):'', e.weight||''].filter(Boolean).join(' \\u00b7 ');
+      return '<div class="ivx" id="ivx-'+i+'"><div class="ivx-n">'+e.name.toUpperCase()+'</div>'+(meta?'<div class="ivx-m">'+meta+'</div>':'')+'</div>';
+    }).join('');
+    const iw=document.getElementById('int-weight'); if(iw) iw.style.display='none';
+  }
+  document.getElementById('int-label').textContent=isWork?'LAVORO':'RIPOSO';
+  document.getElementById('int-timer').textContent=fmtTime(secs);
+  document.getElementById('int-round').textContent='ROUND '+(exIdx+1)+' / '+block.intervals;
+  let cyc=0;
+  if(isWork && st.exercises.length>1){ const elapsed=block.workTime-secs; cyc=Math.floor(elapsed/8) % st.exercises.length; }
+  if(_intCyc!==cyc){
+    _intCyc=cyc;
+    if(st.exercises.length>1){ for(let i=0;i<st.exercises.length;i++){ const el=document.getElementById('ivx-'+i); if(el) el.classList.toggle('active', i===cyc); } }
+    const fe=st.exercises[cyc]||st.exercises[0];
+    if(fe && (fe.videoUrl||fe.videoUrlPermanent)) loadVideo(fe.videoUrl, fe.videoUrlPermanent);
+  }
+}
 function updateIntervalDisplay(block) {
+  if(block.type==='INTERVAL' && block.steps){ renderInterval(block); return; }
+  // ── TABATA: singolo esercizio per stazione ──
   const isWork  = (state === 'WORK');
   const curEx   = block.exercises[exIdx];
-
-  // Durante il RIPOSO: mostra già l'esercizio SUCCESSIVO (preview + video)
-  // così l'atleta sa cosa sta per fare prima che parta il timer di lavoro
   let nextIdx = exIdx + 1;
-  if (nextIdx >= block.exercises.length) nextIdx = 0; // ultimo → torna al primo
+  if (nextIdx >= block.exercises.length) nextIdx = 0;
   const showEx = isWork ? curEx : block.exercises[nextIdx];
-
-  // Badge PROSSIMO: visibile solo durante RIPOSO
+  if(!showEx) return;
   const nextBadge = document.getElementById('int-next-badge');
   if (nextBadge) nextBadge.style.display = isWork ? 'none' : 'inline-block';
-
   document.getElementById('int-pos').textContent=(globalExIdx+1)+' / '+globalFlat.length;
-  document.getElementById('int-exname').textContent=showEx.name.toUpperCase();
+  const exEl=document.getElementById('int-exname'); exEl.classList.remove('multi'); exEl.textContent=showEx.name.toUpperCase();
   const iw=document.getElementById('int-weight'); if(iw){ iw.textContent=showEx.weight?('PESO '+showEx.weight):''; iw.style.display=showEx.weight?'block':'none'; }
   document.getElementById('int-label').textContent=isWork ? 'LAVORO' : 'RIPOSO';
   document.getElementById('int-timer').textContent=fmtTime(secs);
-  document.getElementById('int-round').textContent = block.type==='TABATA'
-    ? 'ROUND '+exerciseRound+' / '+block.roundsPerExercise
-    : 'ROUND '+roundNum+' / '+block.totalRounds;
-
-  // Video: durante LAVORO → esercizio corrente; durante RIPOSO → esercizio successivo
+  document.getElementById('int-round').textContent='ROUND '+exerciseRound+' / '+block.roundsPerExercise;
   if (showEx.videoUrl || showEx.videoUrlPermanent) loadVideo(showEx.videoUrl, showEx.videoUrlPermanent);
 }
 
 function initBlock() {
   const block=WORKOUT[blockIdx];
   if(!block) return;
-  exIdx=0; roundNum=1; amrapCycleIdx=0; exerciseRound=1;
+  exIdx=0; roundNum=1; amrapCycleIdx=0; exerciseRound=1; _intKey=null;
   if(block.type==='AMRAP'||block.type==='CIRCUIT'||block.type==='EMOM') {
     state='AMRAP'; secs=block.totalTime;
     showAmrap(block);
@@ -1006,25 +1040,19 @@ function tick() {
     }
     return;
   }
-  // INTERVAL
+  // INTERVAL a stazioni: exIdx = indice intervallo (0-based), fine a block.intervals
   if(state==='WORK' && block.restTime>0) {
     state='REST'; secs=block.restTime; updateIntervalDisplay(block);
   } else {
-    // Prossimo esercizio / round
     exIdx++; globalExIdx++;
-    if(exIdx>=block.exercises.length) {
-      exIdx=0; roundNum++;
-      if(roundNum>block.totalRounds) {
-        blockIdx++;
-        if(blockIdx<WORKOUT.length) initBlock();
-        return;
-      }
-      // Non incrementare globalExIdx quando ricominciamo il round (stesso set di esercizi)
-      globalExIdx-=block.exercises.length;
+    const tot=block.intervals||(block.steps?block.steps.length:block.exercises.length);
+    if(exIdx>=tot) {
+      blockIdx++;
+      if(blockIdx<WORKOUT.length) initBlock();
+      return;
     }
     state='WORK'; secs=block.workTime;
-    updateIntervalDisplay(block);
-    loadVideo(block.exercises[exIdx].videoUrl, block.exercises[exIdx].videoUrlPermanent);
+    updateIntervalDisplay(block);  // carica già il video della stazione corrente
   }
 }
 
