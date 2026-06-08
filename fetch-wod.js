@@ -449,6 +449,13 @@ function buildWorkoutData(lesson, videoField) {
     // url: campo permanente senza scadenza (fallback se signedUrl scade)
     return v?.['url'] || v?.[videoField.fallbackSubField] || '';
   }
+  function getEquip(ex) {
+    const sub = videoField && videoField.equipmentSubField;
+    const eq = ex.exercise && ex.exercise.equipment;
+    if (!eq) return '';
+    if (typeof eq === 'string') return eq.trim();
+    return (sub && eq[sub]) ? String(eq[sub]).trim() : (eq.name ? String(eq.name).trim() : '');
+  }
 
   // ── Costruisci WORKOUT: blocchi AMRAP o INTERVAL ──────────────────────────
   const WORKOUT = [];
@@ -466,6 +473,9 @@ function buildWorkoutData(lesson, videoField) {
         allEx.push(ex);
 
     globalTotal += allEx.length;
+
+    // Attrezzi unici della sezione (per la schermata "pronti" del mobile)
+    const sectionEquip = [...new Set(allEx.map(getEquip).filter(Boolean))];
 
     // Usa getSectionFormat (stessa logica di index.html) per rilevare il tipo
     const fmt       = getSectionFormat(s);
@@ -543,6 +553,9 @@ function buildWorkoutData(lesson, videoField) {
         }))
       });
     }
+
+    // Attacca la lista attrezzi all'ultimo blocco creato per questa sezione
+    if (WORKOUT.length) WORKOUT[WORKOUT.length - 1].equipment = sectionEquip;
   }
 
   return { WORKOUT, globalTotal };
@@ -1032,6 +1045,20 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;color:#fff;font
 video.ex-video{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain;background:#000}
 .loading-msg{position:absolute;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;font-size:14px;letter-spacing:.18em;color:rgba(255,255,255,.35);background:#000}
 .pause-flag{position:absolute;top:8px;right:8px;z-index:30;font-weight:900;font-size:12px;letter-spacing:.3em;color:#000;background:#FFE500;border-radius:3px;padding:3px 10px;display:none}
+/* ── Schermata PRONTI (attrezzi + INIZIA) ── */
+.ready-screen{display:none;position:absolute;top:0;left:0;right:0;bottom:0;z-index:25;background:#0a0a0a;-webkit-flex-direction:column;flex-direction:column;-webkit-align-items:center;align-items:center;-webkit-justify-content:center;justify-content:center;padding:18px;text-align:center;overflow-y:auto}
+.ready-card{display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;-webkit-align-items:center;align-items:center;gap:16px;max-width:600px;width:100%}
+.ready-top{display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;gap:12px}
+.ready-badge{font-weight:900;font-size:18px;color:#000;background:#FFE500;border-radius:5px;padding:3px 11px;-webkit-flex-shrink:0;flex-shrink:0}
+.ready-name{font-weight:900;font-size:28px;letter-spacing:.03em;text-transform:uppercase;line-height:1;color:#fff;text-align:left}
+.ready-schema{font-size:14px;color:#FFE500;font-weight:600;letter-spacing:.04em;margin-top:4px;text-align:left}
+.ready-equip{display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;-webkit-align-items:center;align-items:center;gap:8px;width:100%;margin:4px 0}
+.ready-eq-hd{font-weight:900;font-size:12px;letter-spacing:.3em;color:rgba(255,229,0,.85);text-transform:uppercase;margin-bottom:4px}
+.ready-eq{font-weight:700;font-size:20px;letter-spacing:.03em;text-transform:uppercase;color:#fff;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);border-radius:8px;padding:8px 20px}
+.ready-eq-none{color:rgba(255,255,255,.6);background:transparent;border-style:dashed}
+.ready-play{margin-top:8px;display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;gap:10px;font-family:inherit;font-weight:900;font-size:24px;letter-spacing:.1em;color:#000;background:#FFE500;border:none;border-radius:12px;padding:15px 44px;text-transform:uppercase}
+.ready-play:active{opacity:.85}
+.ready-play-ic{font-size:18px}
 .drawer-backdrop{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);opacity:0;pointer-events:none;transition:opacity .25s;z-index:40}
 .drawer-backdrop.open{opacity:1;pointer-events:auto}
 .drawer{position:fixed;top:0;bottom:0;left:0;width:min(75vw,330px);background:#111;border-right:2px solid #FFE500;transform:translateX(-105%);transition:transform .25s;z-index:50;display:flex;flex-direction:column;padding:14px 0;overflow-y:auto}
@@ -1097,6 +1124,19 @@ video.ex-video{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:
       <div class="loading-msg" id="loading-msg">Caricamento video...</div>
       <video class="ex-video" id="ex-video" autoplay muted loop playsinline preload="auto"></video>
       <div class="pause-flag" id="pause-flag">IN PAUSA</div>
+    </div>
+    <div id="ui-ready" class="ready-screen">
+      <div class="ready-card">
+        <div class="ready-top">
+          <span class="ready-badge" id="ready-badge">01</span>
+          <div class="ready-titles">
+            <div class="ready-name" id="ready-name">&mdash;</div>
+            <div class="ready-schema" id="ready-schema"></div>
+          </div>
+        </div>
+        <div class="ready-equip" id="ready-equip"></div>
+        <button class="ready-play" id="ready-play"><span class="ready-play-ic">&#9654;</span> INIZIA</button>
+      </div>
     </div>
   </div>
 </div>
@@ -1233,6 +1273,7 @@ function updateIntervalDisplay(block) {
 }
 
 function showDone() {
+  document.getElementById('ui-ready').style.display='none';
   document.getElementById('tb-name').textContent='ALLENAMENTO COMPLETATO';
   document.getElementById('tb-fmt').textContent='';
   document.getElementById('ui-interval').style.display='none';
@@ -1243,9 +1284,34 @@ function showDone() {
   loadVideo('');
 }
 
+// initBlock = schermata "PRONTI" (in pausa) con la lista attrezzi della sezione.
+// Il timer parte solo quando l'utente preme INIZIA → beginBlock().
 function initBlock() {
   const block=WORKOUT[blockIdx];
   if(!block){ showDone(); return; }
+  state='READY';
+  showReady(block);
+  markCurrent();
+}
+function showReady(block){
+  setTopbar(block);
+  document.getElementById('ready-badge').textContent=String(blockIdx+1).padStart(2,'0');
+  document.getElementById('ready-name').textContent=block.sectionName;
+  document.getElementById('ready-schema').textContent=block.sectionSchema||'';
+  const eq=(block.equipment&&block.equipment.length)?block.equipment:[];
+  const list=document.getElementById('ready-equip');
+  const items = eq.length
+    ? eq.map(function(e){ return '<div class="ready-eq">'+e+'</div>'; }).join('')
+    : '<div class="ready-eq ready-eq-none">A corpo libero</div>';
+  list.innerHTML='<div class="ready-eq-hd">Attrezzi necessari</div>'+items;
+  document.getElementById('ui-ready').style.display='flex';
+  loadVideo('');
+}
+// beginBlock = avvio reale della sezione (ex initBlock)
+function beginBlock() {
+  const block=WORKOUT[blockIdx];
+  if(!block){ showDone(); return; }
+  document.getElementById('ui-ready').style.display='none';
   exIdx=0; roundNum=1; amrapCycleIdx=0; exerciseRound=1;
   if(block.type==='AMRAP'||block.type==='CIRCUIT'||block.type==='EMOM') {
     state='AMRAP'; secs=block.totalTime;
@@ -1403,7 +1469,7 @@ function announceTransition(preBlock){
 
 // tick = wrapper di tickCore: rileva i cambi di fase, suona i beep e annuncia
 function tick(){
-  if(paused) return;
+  if(paused || state==='READY') return;   // in 'PRONTI' il timer è fermo finché non si preme INIZIA
   const preBlock = blockIdx;
   const pre = state+'|'+blockIdx+'|'+exIdx+'|'+roundNum+'|'+exerciseRound;
   tickCore();
@@ -1417,6 +1483,15 @@ function tick(){
     if(b && !(b.type==='FOR_TIME' && b.timeCap===0)) beepCountdown();
   }
 }
+
+// Tasto INIZIA della schermata "PRONTI": avvia la sezione (col gesto si sblocca l'audio)
+document.getElementById('ready-play').addEventListener('click',function(){
+  ensureAudio();
+  beginBlock();
+  beepWork();
+  const b=WORKOUT[blockIdx];
+  if(b){ if(b.type==='INTERVAL'||b.type==='TABATA'){ const ex=b.exercises[exIdx]; if(ex) speak(ex.name,'en'); } else { speak(b.sectionName,'it'); } }
+});
 
 document.getElementById('snd-btn').addEventListener('click',function(){
   soundOn=!soundOn; ensureAudio();
@@ -1645,10 +1720,14 @@ async function getExerciseVideoField(token) {
       videoType: __type(name: "Video") {
         fields { name type { kind name } }
       }
+      equipmentType: __type(name: "Equipment") {
+        fields { name type { kind name } }
+      }
     }`);
 
-    const exFields  = data.exerciseType?.fields || [];
-    const vidFields = data.videoType?.fields   || [];
+    const exFields  = data.exerciseType?.fields  || [];
+    const vidFields = data.videoType?.fields     || [];
+    const eqFields  = data.equipmentType?.fields || [];
 
     // Dump debug
     const exDump  = exFields.map(f => {
@@ -1657,9 +1736,21 @@ async function getExerciseVideoField(token) {
       return `${f.name}: ${k}/${t}`;
     }).join('\n');
     const vidDump = vidFields.map(f => `${f.name}: ${f.type.kind}/${f.type.name||'?'}`).join('\n');
-    const fullDump = `=== Exercise ===\n${exDump}\n\n=== Video ===\n${vidDump}`;
+    const eqDump  = eqFields.map(f => `${f.name}: ${f.type.kind}/${f.type.name||'?'}`).join('\n') || '(nessun campo / tipo Equipment assente)';
+    const fullDump = `=== Exercise ===\n${exDump}\n\n=== Video ===\n${vidDump}\n\n=== Equipment ===\n${eqDump}`;
     fs.writeFileSync(path.join(__dirname, 'debug-exercise-fields.txt'), fullDump, 'utf8');
     console.log(fullDump);
+
+    // Campo attrezzi: cerca un campo "nome" (String) sul tipo Equipment
+    let equipmentQuery = '', equipmentSubField = '';
+    if (exFields.some(f => f.name === 'equipment')) {
+      const cand = ['name','title','label','displayName'];
+      const nameField = eqFields.find(f => cand.includes(f.name) && f.type.name === 'String')
+                     || eqFields.find(f => cand.includes(f.name))
+                     || eqFields.find(f => f.type.name === 'String');
+      if (nameField) { equipmentSubField = nameField.name; equipmentQuery = `equipment { ${nameField.name} }`; }
+      console.log(`Campo attrezzi: ${equipmentQuery || '(nessun campo nome trovato su Equipment)'}`);
+    }
 
     // Trova campo video sull'Exercise
     const videoField = exFields.find(f => f.name === 'video');
@@ -1681,7 +1772,7 @@ async function getExerciseVideoField(token) {
     console.log(`Campo video: ${query}`);
     console.log(`Campi Video disponibili: ${vidFields.map(f=>f.name).join(', ')}`);
     // videoSubField = campo preferito per l'estrazione (signedUrl se fresco, altrimenti url)
-    return { name: 'video', query, videoSubField: 'signedUrl', fallbackSubField: 'url' };
+    return { name: 'video', query, videoSubField: 'signedUrl', fallbackSubField: 'url', equipmentQuery, equipmentSubField };
   } catch (e) {
     console.log('Introspection video field fallita:', e.message);
     return null;
@@ -1913,8 +2004,9 @@ async function main() {
   // Step 3: Find today's lesson
   const { lessonId, isoDate } = await getTodayLessonId(token);
 
-  // Step 4: Get full lesson details (con campo video se disponibile)
-  const lesson = await getLessonDetails(token, lessonId, videoField ? videoField.query : '');
+  // Step 4: Get full lesson details (con campo video + attrezzi se disponibili)
+  const exFieldsQuery = videoField ? [videoField.query, videoField.equipmentQuery].filter(Boolean).join(' ') : '';
+  const lesson = await getLessonDetails(token, lessonId, exFieldsQuery);
   console.log(`Lezione: "${lesson.name}" — ${lesson.sections.length} sezioni`);
 
   // Step 5: Traduci descrizione in italiano
