@@ -1003,6 +1003,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;color:#fff;font
 .topbar{position:relative;height:48px;min-height:48px;display:flex;align-items:center;gap:10px;background:#0d0d0d;border-bottom:1px solid rgba(255,255,255,.18);padding:0 10px}
 .bar-accent{position:absolute;top:0;left:0;right:0;height:4px;background:#FFE500}
 .pf-mark{height:26px;width:auto;-webkit-flex-shrink:0;flex-shrink:0;-webkit-filter:invert(1);filter:invert(1);opacity:.9;margin-right:2px}
+.tb-row{display:contents}
 .icon-btn{width:40px;height:40px;border:1px solid rgba(255,255,255,.25);border-radius:8px;background:transparent;color:#fff;font-size:20px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:inherit}
 .icon-btn:active{background:rgba(255,229,0,.2)}
 .tb-title{flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;display:flex;align-items:center;gap:8px}
@@ -1035,6 +1036,8 @@ video.ex-video{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:
 .drawer-backdrop.open{opacity:1;pointer-events:auto}
 .drawer{position:fixed;top:0;bottom:0;left:0;width:min(75vw,330px);background:#111;border-right:2px solid #FFE500;transform:translateX(-105%);transition:transform .25s;z-index:50;display:flex;flex-direction:column;padding:14px 0;overflow-y:auto}
 .drawer.open{transform:translateX(0)}
+.drawer-logo{padding:4px 16px 14px}
+.drawer-logo img{width:75%;max-width:200px;height:auto;display:block;-webkit-filter:invert(1);filter:invert(1)}
 .drawer-hd{font-weight:900;font-size:13px;letter-spacing:.3em;color:rgba(255,229,0,.8);text-transform:uppercase;padding:0 16px 10px;border-bottom:1px solid rgba(255,255,255,.15);margin-bottom:6px}
 .drawer-item{display:flex;align-items:center;gap:10px;width:100%;background:transparent;border:none;border-bottom:1px solid rgba(255,255,255,.08);color:#fff;padding:12px 16px;text-align:left;font-family:inherit}
 .drawer-item:active,.drawer-item.cur{background:rgba(255,229,0,.14)}
@@ -1044,6 +1047,10 @@ video.ex-video{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:
 .drawer-foot{margin-top:auto;padding:14px 16px 4px;font-size:11px;letter-spacing:.15em;color:rgba(255,255,255,.4);text-transform:uppercase}
 /* ── Portrait: layout impilato — video sopra (i clip HYROX sono verticali), timer sotto ── */
 @media (orientation: portrait){
+  /* topbar su due righe: identità+sezione sopra, comandi sotto */
+  .topbar{-webkit-flex-direction:column;flex-direction:column;height:auto;-webkit-align-items:stretch;align-items:stretch;gap:6px;padding:6px 10px}
+  .tb-row{display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;gap:10px}
+  .tb-row-ctrl{-webkit-justify-content:flex-end;justify-content:flex-end}
   .main{flex-direction:column-reverse}
   .info{width:100%;min-width:0;flex:0 0 35%;border-right:none;border-top:1px solid rgba(255,255,255,.18);padding:8px 14px}
   .video-wrap{flex:1 1 auto;min-height:0}
@@ -1058,13 +1065,17 @@ video.ex-video{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:
 <div class="app">
   <div class="topbar">
     <div class="bar-accent"></div>
-    <img class="pf-mark" src="data:image/png;base64,${PF_MARK_B64}" alt="Planet Fitness">
-    <button class="icon-btn" id="menu-btn" aria-label="Menu">&#9776;</button>
-    <div class="tb-title"><span class="tb-name" id="tb-name">&mdash;</span><span class="tb-fmt" id="tb-fmt"></span></div>
-    <button class="icon-btn" id="voice-btn" aria-label="Voce">&#128483;&#65039;</button>
-    <button class="icon-btn" id="snd-btn" aria-label="Audio">&#128266;</button>
-    <button class="icon-btn" id="fs-btn" aria-label="Schermo intero">&#x2922;</button>
-    <button class="icon-btn" id="pause-btn" aria-label="Pausa">&#10074;&#10074;</button>
+    <div class="tb-row tb-row-main">
+      <img class="pf-mark" src="data:image/png;base64,${PF_MARK_B64}" alt="Planet Fitness">
+      <button class="icon-btn" id="menu-btn" aria-label="Menu">&#9776;</button>
+      <div class="tb-title"><span class="tb-name" id="tb-name">&mdash;</span><span class="tb-fmt" id="tb-fmt"></span></div>
+    </div>
+    <div class="tb-row tb-row-ctrl">
+      <button class="icon-btn" id="voice-btn" aria-label="Voce">&#128483;&#65039;</button>
+      <button class="icon-btn" id="snd-btn" aria-label="Audio">&#128266;</button>
+      <button class="icon-btn" id="fs-btn" aria-label="Schermo intero">&#x2922;</button>
+      <button class="icon-btn" id="pause-btn" aria-label="Pausa">&#10074;&#10074;</button>
+    </div>
   </div>
   <div class="main">
     <div class="info">
@@ -1091,6 +1102,7 @@ video.ex-video{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:
 </div>
 <div class="drawer-backdrop" id="drawer-backdrop"></div>
 <div class="drawer" id="drawer">
+  <div class="drawer-logo"><img src="data:image/png;base64,${PF_LOGO_B64}" alt="Planet Fitness"></div>
   <div class="drawer-hd">Fasi allenamento</div>
   <div id="drawer-items"></div>
   <div class="drawer-foot">Planet Fitness &middot; Mosciano S.A.<br>${esc(dateStr)}</div>
