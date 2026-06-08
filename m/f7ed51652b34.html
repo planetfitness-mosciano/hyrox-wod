@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- generated:2026-06-08T14:10:22.176Z -->
+<!-- generated:2026-06-08T14:27:50.231Z -->
 <html lang="it"><head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
@@ -20,7 +20,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;color:#fff;font
 .tb-title{flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;display:flex;align-items:center;gap:8px}
 .tb-name{font-weight:800;font-size:18px;letter-spacing:.08em;text-transform:uppercase;overflow:hidden;text-overflow:ellipsis}
 .tb-fmt{font-weight:900;font-size:11px;letter-spacing:.2em;color:#000;background:#FFE500;border-radius:3px;padding:2px 7px;text-transform:uppercase;flex-shrink:0}
-#pause-btn{border-color:rgba(255,229,0,.7);color:#FFE500;font-size:15px}
+#pause-btn{width:48px;height:48px;border-color:rgba(255,229,0,.7);color:#FFE500;font-size:18px}
 .main{flex:1;display:flex;flex-direction:row;overflow:hidden;position:relative}
 .info{width:42%;min-width:42%;background:#0d0d0d;border-right:1px solid rgba(255,255,255,.18);display:flex;flex-direction:column;overflow:hidden;padding:8px 12px}
 #ui-amrap{display:flex;flex-direction:column;flex:1;overflow:hidden}
@@ -116,9 +116,6 @@ video.ex-video{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:
       <div class="tb-title"><span class="tb-name" id="tb-name">&mdash;</span><span class="tb-fmt" id="tb-fmt"></span></div>
     </div>
     <div class="tb-row tb-row-ctrl">
-      <button class="icon-btn" id="voice-btn" aria-label="Voce">&#128483;&#65039;</button>
-      <button class="icon-btn" id="snd-btn" aria-label="Audio">&#128266;</button>
-      <button class="icon-btn" id="fs-btn" aria-label="Schermo intero">&#x2922;</button>
       <button class="icon-btn" id="pause-btn" aria-label="Pausa">&#10074;&#10074;</button>
     </div>
   </div>
@@ -566,28 +563,9 @@ document.getElementById('ready-play').addEventListener('click',function(){
   if(b){ if(b.type==='INTERVAL'||b.type==='TABATA'){ const nm=curStationFirstName(b); if(nm) speak(nm,'en'); } else { speak(b.sectionName,'it'); } }
 });
 
-document.getElementById('snd-btn').addEventListener('click',function(){
-  soundOn=!soundOn; ensureAudio();
-  this.innerHTML=soundOn?'&#128266;':'&#128263;';
-});
-
-document.getElementById('voice-btn').addEventListener('click',function(){
-  voiceOn=!voiceOn;
-  this.style.opacity=voiceOn?'1':'0.4';
-  if(voiceOn){ const b=WORKOUT[blockIdx]; if(b){ if(b.type==='INTERVAL'||b.type==='TABATA'){ const nm=curStationFirstName(b); if(nm) speak(nm,'en'); } else { speak(b.sectionName,'it'); } } }
-  else { try{ speechSynthesis.cancel(); }catch(e){} }
-});
-
-// ── Schermo intero (Android; su iPhone Safari l'API non è permessa da Apple) ──
-function toggleFs(){
-  const d=document.documentElement;
-  const isFs=document.fullscreenElement||document.webkitFullscreenElement;
-  try{
-    if(!isFs){ (d.requestFullscreen||d.webkitRequestFullscreen||function(){}).call(d); }
-    else { (document.exitFullscreen||document.webkitExitFullscreen||function(){}).call(document); }
-  }catch(e){}
-}
-document.getElementById('fs-btn').addEventListener('click',function(){ ensureAudio(); toggleFs(); });
+// Voce e beep restano ATTIVI di default (si silenziano col volume del telefono).
+// I pulsanti voce/audio/fullscreen sono stati rimossi: in topbar resta solo pause/play.
+// Su Android il fullscreen scatta comunque al primo tocco (onFirstGesture, sotto).
 
 // Primo tocco ovunque: sblocca l'audio e prova il fullscreen automatico
 let firstGesture=false;
