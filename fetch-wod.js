@@ -1382,7 +1382,7 @@ function announceTransition(preBlock){
   if(state==='REST'){ speak('riposo','it'); return; }
   if(block.type==='INTERVAL'||block.type==='TABATA'){          // fase a esercizio singolo
     const ex=block.exercises[exIdx];
-    if(ex) speak(ex.name,'it'); // nomi inglesi letti con voce italiana = "accento italiano", più comprensibile
+    if(ex) speak(ex.name,'it');
   }
 }
 
@@ -1411,7 +1411,7 @@ document.getElementById('snd-btn').addEventListener('click',function(){
 document.getElementById('voice-btn').addEventListener('click',function(){
   voiceOn=!voiceOn;
   this.style.opacity=voiceOn?'1':'0.4';
-  if(voiceOn){ const b=WORKOUT[blockIdx]; if(b){ if(b.type==='INTERVAL'||b.type==='TABATA'){ const ex=b.exercises[exIdx]; if(ex) speak(ex.name,'it'); // nomi inglesi letti con voce italiana = "accento italiano", più comprensibile } else { speak(b.sectionName,'it'); } } }
+  if(voiceOn){ const b=WORKOUT[blockIdx]; if(b){ if(b.type==='INTERVAL'||b.type==='TABATA'){ const ex=b.exercises[exIdx]; if(ex) speak(ex.name,'it'); } else { speak(b.sectionName,'it'); } } }
   else { try{ speechSynthesis.cancel(); }catch(e){} }
 });
 
@@ -1440,7 +1440,7 @@ function onFirstGesture(){
     // annuncia subito l'esercizio/sezione corrente (la voce si sblocca col gesto)
     try{
       const b=WORKOUT[blockIdx];
-      if(b){ if(b.type==='INTERVAL'||b.type==='TABATA'){ const ex=b.exercises[exIdx]; if(ex) speak(ex.name,'it'); // nomi inglesi letti con voce italiana = "accento italiano", più comprensibile } else { speak(b.sectionName,'it'); } }
+      if(b){ if(b.type==='INTERVAL'||b.type==='TABATA'){ const ex=b.exercises[exIdx]; if(ex) speak(ex.name,'it'); } else { speak(b.sectionName,'it'); } }
     }catch(e){}
   }
 }
