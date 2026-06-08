@@ -1058,6 +1058,7 @@ video.ex-video{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:
     <div class="bar-accent"></div>
     <button class="icon-btn" id="menu-btn" aria-label="Menu">&#9776;</button>
     <div class="tb-title"><span class="tb-name" id="tb-name">&mdash;</span><span class="tb-fmt" id="tb-fmt"></span></div>
+    <button class="icon-btn" id="voice-btn" aria-label="Voce">&#128483;&#65039;</button>
     <button class="icon-btn" id="snd-btn" aria-label="Audio">&#128266;</button>
     <button class="icon-btn" id="fs-btn" aria-label="Schermo intero">&#x2922;</button>
     <button class="icon-btn" id="pause-btn" aria-label="Pausa">&#10074;&#10074;</button>
@@ -1357,15 +1358,45 @@ function beepCountdown(){ beep(880,0.12); }                      // 3-2-1
 function beepWork(){ beep(1320,0.15,0); beep(1320,0.4,0.2); }    // doppio acuto: VIA
 function beepRest(){ beep(520,0.45); }                           // grave: stop/riposo
 
-// tick = wrapper di tickCore: rileva i cambi di fase e suona i beep
+// ── Voce (Web Speech API): annuncia esercizio / riposo / sezione ──
+// Nomi esercizio in voce inglese (sono in inglese), 'riposo'/sezioni in italiano.
+let voiceOn=true;
+function pickVoice(prefix){
+  try{ const vs=speechSynthesis.getVoices()||[]; return vs.find(v=>v.lang&&v.lang.toLowerCase().indexOf(prefix)===0)||null; }catch(e){ return null; }
+}
+function speak(text, lang){
+  if(!voiceOn || !('speechSynthesis' in window) || !text) return;
+  try{
+    const u=new SpeechSynthesisUtterance(text);
+    u.lang = (lang==='en') ? 'en-US' : 'it-IT';
+    const v=pickVoice(lang==='en'?'en':'it'); if(v) u.voice=v;
+    u.rate=1.0; u.volume=1.0;
+    speechSynthesis.speak(u);
+  }catch(e){}
+}
+function announceTransition(preBlock){
+  if(!voiceOn) return;
+  const block=WORKOUT[blockIdx];
+  if(!block){ speak('Allenamento completato','it'); return; }
+  if(blockIdx!==preBlock) speak(block.sectionName,'it');      // nuova sezione
+  if(state==='REST'){ speak('riposo','it'); return; }
+  if(block.type==='INTERVAL'||block.type==='TABATA'){          // fase a esercizio singolo
+    const ex=block.exercises[exIdx];
+    if(ex) speak(ex.name,'en');
+  }
+}
+
+// tick = wrapper di tickCore: rileva i cambi di fase, suona i beep e annuncia
 function tick(){
   if(paused) return;
+  const preBlock = blockIdx;
   const pre = state+'|'+blockIdx+'|'+exIdx+'|'+roundNum+'|'+exerciseRound;
   tickCore();
   const post = state+'|'+blockIdx+'|'+exIdx+'|'+roundNum+'|'+exerciseRound;
   if(pre!==post){
     if(blockIdx>=WORKOUT.length || state==='REST'){ beepRest(); }
     else { beepWork(); }
+    announceTransition(preBlock);
   } else if(secs>0 && secs<=3){
     const b=WORKOUT[blockIdx];
     if(b && !(b.type==='FOR_TIME' && b.timeCap===0)) beepCountdown();
@@ -1375,6 +1406,13 @@ function tick(){
 document.getElementById('snd-btn').addEventListener('click',function(){
   soundOn=!soundOn; ensureAudio();
   this.innerHTML=soundOn?'&#128266;':'&#128263;';
+});
+
+document.getElementById('voice-btn').addEventListener('click',function(){
+  voiceOn=!voiceOn;
+  this.style.opacity=voiceOn?'1':'0.4';
+  if(voiceOn){ const b=WORKOUT[blockIdx]; if(b){ if(b.type==='INTERVAL'||b.type==='TABATA'){ const ex=b.exercises[exIdx]; if(ex) speak(ex.name,'en'); } else { speak(b.sectionName,'it'); } } }
+  else { try{ speechSynthesis.cancel(); }catch(e){} }
 });
 
 // ── Schermo intero (Android; su iPhone Safari l'API non è permessa da Apple) ──
@@ -1399,6 +1437,11 @@ function onFirstGesture(){
     // il gesto utente è il momento più affidabile per wake lock e nosleep
     acquireWake();
     if(noSleepVid) noSleepVid.play().catch(function(){});
+    // annuncia subito l'esercizio/sezione corrente (la voce si sblocca col gesto)
+    try{
+      const b=WORKOUT[blockIdx];
+      if(b){ if(b.type==='INTERVAL'||b.type==='TABATA'){ const ex=b.exercises[exIdx]; if(ex) speak(ex.name,'en'); } else { speak(b.sectionName,'it'); } }
+    }catch(e){}
   }
 }
 document.addEventListener('click',onFirstGesture,true);
