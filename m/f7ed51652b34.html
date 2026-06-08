@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- generated:2026-06-08T07:36:35.758Z -->
+<!-- generated:2026-06-08T11:41:32.444Z -->
 <html lang="it"><head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
@@ -43,6 +43,20 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;color:#fff;font
 video.ex-video{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain;background:#000}
 .loading-msg{position:absolute;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;font-size:14px;letter-spacing:.18em;color:rgba(255,255,255,.35);background:#000}
 .pause-flag{position:absolute;top:8px;right:8px;z-index:30;font-weight:900;font-size:12px;letter-spacing:.3em;color:#000;background:#FFE500;border-radius:3px;padding:3px 10px;display:none}
+/* ── Schermata PRONTI (attrezzi + INIZIA) ── */
+.ready-screen{display:none;position:absolute;top:0;left:0;right:0;bottom:0;z-index:25;background:#0a0a0a;-webkit-flex-direction:column;flex-direction:column;-webkit-align-items:center;align-items:center;-webkit-justify-content:center;justify-content:center;padding:18px;text-align:center;overflow-y:auto}
+.ready-card{display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;-webkit-align-items:center;align-items:center;gap:16px;max-width:600px;width:100%}
+.ready-top{display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;gap:12px}
+.ready-badge{font-weight:900;font-size:18px;color:#000;background:#FFE500;border-radius:5px;padding:3px 11px;-webkit-flex-shrink:0;flex-shrink:0}
+.ready-name{font-weight:900;font-size:28px;letter-spacing:.03em;text-transform:uppercase;line-height:1;color:#fff;text-align:left}
+.ready-schema{font-size:14px;color:#FFE500;font-weight:600;letter-spacing:.04em;margin-top:4px;text-align:left}
+.ready-equip{display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;-webkit-align-items:center;align-items:center;gap:8px;width:100%;margin:4px 0}
+.ready-eq-hd{font-weight:900;font-size:12px;letter-spacing:.3em;color:rgba(255,229,0,.85);text-transform:uppercase;margin-bottom:4px}
+.ready-eq{font-weight:700;font-size:20px;letter-spacing:.03em;text-transform:uppercase;color:#fff;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);border-radius:8px;padding:8px 20px}
+.ready-eq-none{color:rgba(255,255,255,.6);background:transparent;border-style:dashed}
+.ready-play{margin-top:8px;display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;gap:10px;font-family:inherit;font-weight:900;font-size:24px;letter-spacing:.1em;color:#000;background:#FFE500;border:none;border-radius:12px;padding:15px 44px;text-transform:uppercase}
+.ready-play:active{opacity:.85}
+.ready-play-ic{font-size:18px}
 .drawer-backdrop{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);opacity:0;pointer-events:none;transition:opacity .25s;z-index:40}
 .drawer-backdrop.open{opacity:1;pointer-events:auto}
 .drawer{position:fixed;top:0;bottom:0;left:0;width:min(75vw,330px);background:#111;border-right:2px solid #FFE500;transform:translateX(-105%);transition:transform .25s;z-index:50;display:flex;flex-direction:column;padding:14px 0;overflow-y:auto}
@@ -109,6 +123,19 @@ video.ex-video{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:
       <video class="ex-video" id="ex-video" autoplay muted loop playsinline preload="auto"></video>
       <div class="pause-flag" id="pause-flag">IN PAUSA</div>
     </div>
+    <div id="ui-ready" class="ready-screen">
+      <div class="ready-card">
+        <div class="ready-top">
+          <span class="ready-badge" id="ready-badge">01</span>
+          <div class="ready-titles">
+            <div class="ready-name" id="ready-name">&mdash;</div>
+            <div class="ready-schema" id="ready-schema"></div>
+          </div>
+        </div>
+        <div class="ready-equip" id="ready-equip"></div>
+        <button class="ready-play" id="ready-play"><span class="ready-play-ic">&#9654;</span> INIZIA</button>
+      </div>
+    </div>
   </div>
 </div>
 <div class="drawer-backdrop" id="drawer-backdrop"></div>
@@ -119,7 +146,7 @@ video.ex-video{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:
   <div class="drawer-foot">Planet Fitness &middot; Mosciano S.A.<br>LUNEDÌ 8 GIUGNO 2026</div>
 </div>
 <script>
-const WORKOUT = [{"type":"INTERVAL","fmt":"INTERVAL","sectionName":"Warm up","sectionSchema":"45s lavoro · 20s riposo · 5 rounds · 5min 25s","workTime":45,"restTime":20,"totalRounds":5,"exercises":[{"name":"Low Plank Hip Rotations","rpe":null,"videoUrl":"../videos/hUyDLdkLtJoZt7B9m3H1eu.mp4","videoUrlPermanent":""},{"name":"A-Skips","rpe":null,"videoUrl":"../videos/kbZ4JyCcTwzhSCtG38tsNj.mp4","videoUrlPermanent":""},{"name":"OH Bowler Lunge","rpe":null,"videoUrl":"../videos/nGbmJjTtTQT7ZXrvJUfvkQ.mp4","videoUrlPermanent":""},{"name":"Spiderman Pushup","rpe":null,"videoUrl":"../videos/6AaoPJWs1gaA6XWGGCnZkW.mp4","videoUrlPermanent":""},{"name":"90-90 Transitions","rpe":null,"videoUrl":"../videos/6o5HAk634HFpQRTofzg2LP.mp4","videoUrlPermanent":""}]},{"type":"INTERVAL","fmt":"INTERVAL","sectionName":"Main Workout","sectionSchema":"90s lavoro · 30s riposo · 20 rounds · 40min","workTime":90,"restTime":30,"totalRounds":20,"exercises":[{"name":"DB Devil's Press","rpe":null,"videoUrl":"../videos/nvJ2w5N4uS9pCFdhzggN6J.mp4","videoUrlPermanent":""},{"name":"DB Skier Swing","rpe":null,"videoUrl":"../videos/re3NoH9XCw4gmfPeJa6Tx9.mp4","videoUrlPermanent":""},{"name":"Run","rpe":8,"videoUrl":"../videos/u6sDeXcvGn4Cv2in5ipQ1G.mp4","videoUrlPermanent":""},{"name":"DB Bench Press","rpe":null,"videoUrl":"../videos/oRJTBK4xwNg7KD4uZ7BCK5.mp4","videoUrlPermanent":""},{"name":"SkiErg","rpe":8,"videoUrl":"../videos/8jYBYELZRXTiLfbNt3vcoe.mp4","videoUrlPermanent":""},{"name":"Sled Pull","rpe":null,"videoUrl":"../videos/5W1Y84fgbRmJRTv9n4AThC.mp4","videoUrlPermanent":""},{"name":"RowErg","rpe":8,"videoUrl":"../videos/b4j1CVhqQNpXbG31z8iXXe.mp4","videoUrlPermanent":""},{"name":"Alt Plyo Step up","rpe":null,"videoUrl":"../videos/6PgqeuFhjXwBH3tq9DMkN7.mp4","videoUrlPermanent":""},{"name":"Rest","rpe":null,"videoUrl":"../videos/gbhzaM7bararSZ5xTAepa5.mp4","videoUrlPermanent":""},{"name":"Run","rpe":8,"videoUrl":"../videos/u6sDeXcvGn4Cv2in5ipQ1G.mp4","videoUrlPermanent":""},{"name":"Low Plank","rpe":null,"videoUrl":"../videos/nw9W5gPVCwQoAbSsMMCcdp.mp4","videoUrlPermanent":""},{"name":"Wallballs","rpe":null,"videoUrl":"../videos/92cmm1zraVuGHaqvhFhKKj.mp4","videoUrlPermanent":""}]},{"type":"FOR_TIME","fmt":"FOR TIME","sectionName":"Post Workout Stretch/ Mobility","sectionSchema":"1 round · 5min","timeCap":0,"exercises":[]}];
+const WORKOUT = [{"type":"INTERVAL","fmt":"INTERVAL","sectionName":"Warm up","sectionSchema":"45s lavoro · 20s riposo · 5 rounds · 5min 25s","workTime":45,"restTime":20,"totalRounds":5,"exercises":[{"name":"Low Plank Hip Rotations","rpe":null,"videoUrl":"../videos/hUyDLdkLtJoZt7B9m3H1eu.mp4","videoUrlPermanent":""},{"name":"A-Skips","rpe":null,"videoUrl":"../videos/kbZ4JyCcTwzhSCtG38tsNj.mp4","videoUrlPermanent":""},{"name":"OH Bowler Lunge","rpe":null,"videoUrl":"../videos/nGbmJjTtTQT7ZXrvJUfvkQ.mp4","videoUrlPermanent":""},{"name":"Spiderman Pushup","rpe":null,"videoUrl":"../videos/6AaoPJWs1gaA6XWGGCnZkW.mp4","videoUrlPermanent":""},{"name":"90-90 Transitions","rpe":null,"videoUrl":"../videos/6o5HAk634HFpQRTofzg2LP.mp4","videoUrlPermanent":""}],"equipment":[]},{"type":"INTERVAL","fmt":"INTERVAL","sectionName":"Main Workout","sectionSchema":"90s lavoro · 30s riposo · 20 rounds · 40min","workTime":90,"restTime":30,"totalRounds":20,"exercises":[{"name":"DB Devil's Press","rpe":null,"videoUrl":"../videos/nvJ2w5N4uS9pCFdhzggN6J.mp4","videoUrlPermanent":""},{"name":"DB Skier Swing","rpe":null,"videoUrl":"../videos/re3NoH9XCw4gmfPeJa6Tx9.mp4","videoUrlPermanent":""},{"name":"Run","rpe":8,"videoUrl":"../videos/u6sDeXcvGn4Cv2in5ipQ1G.mp4","videoUrlPermanent":""},{"name":"DB Bench Press","rpe":null,"videoUrl":"../videos/oRJTBK4xwNg7KD4uZ7BCK5.mp4","videoUrlPermanent":""},{"name":"SkiErg","rpe":8,"videoUrl":"../videos/8jYBYELZRXTiLfbNt3vcoe.mp4","videoUrlPermanent":""},{"name":"Sled Pull","rpe":null,"videoUrl":"../videos/5W1Y84fgbRmJRTv9n4AThC.mp4","videoUrlPermanent":""},{"name":"RowErg","rpe":8,"videoUrl":"../videos/b4j1CVhqQNpXbG31z8iXXe.mp4","videoUrlPermanent":""},{"name":"Alt Plyo Step up","rpe":null,"videoUrl":"../videos/6PgqeuFhjXwBH3tq9DMkN7.mp4","videoUrlPermanent":""},{"name":"Rest","rpe":null,"videoUrl":"../videos/gbhzaM7bararSZ5xTAepa5.mp4","videoUrlPermanent":""},{"name":"Run","rpe":8,"videoUrl":"../videos/u6sDeXcvGn4Cv2in5ipQ1G.mp4","videoUrlPermanent":""},{"name":"Low Plank","rpe":null,"videoUrl":"../videos/nw9W5gPVCwQoAbSsMMCcdp.mp4","videoUrlPermanent":""},{"name":"Wallballs","rpe":null,"videoUrl":"../videos/92cmm1zraVuGHaqvhFhKKj.mp4","videoUrlPermanent":""}],"equipment":["Dumbbell","Treadmill","Ski Erg","Sled","Row Erg","Wallball"]},{"type":"FOR_TIME","fmt":"FOR TIME","sectionName":"Post Workout Stretch/ Mobility","sectionSchema":"1 round · 5min","timeCap":0,"exercises":[],"equipment":[]}];
 let blockIdx = 0, state = 'INIT', secs = 0;
 let exIdx = 0, roundNum = 1, amrapCycleIdx = 0;
 let exerciseRound = 1;
@@ -244,6 +271,7 @@ function updateIntervalDisplay(block) {
 }
 
 function showDone() {
+  document.getElementById('ui-ready').style.display='none';
   document.getElementById('tb-name').textContent='ALLENAMENTO COMPLETATO';
   document.getElementById('tb-fmt').textContent='';
   document.getElementById('ui-interval').style.display='none';
@@ -254,9 +282,34 @@ function showDone() {
   loadVideo('');
 }
 
+// initBlock = schermata "PRONTI" (in pausa) con la lista attrezzi della sezione.
+// Il timer parte solo quando l'utente preme INIZIA → beginBlock().
 function initBlock() {
   const block=WORKOUT[blockIdx];
   if(!block){ showDone(); return; }
+  state='READY';
+  showReady(block);
+  markCurrent();
+}
+function showReady(block){
+  setTopbar(block);
+  document.getElementById('ready-badge').textContent=String(blockIdx+1).padStart(2,'0');
+  document.getElementById('ready-name').textContent=block.sectionName;
+  document.getElementById('ready-schema').textContent=block.sectionSchema||'';
+  const eq=(block.equipment&&block.equipment.length)?block.equipment:[];
+  const list=document.getElementById('ready-equip');
+  const items = eq.length
+    ? eq.map(function(e){ return '<div class="ready-eq">'+e+'</div>'; }).join('')
+    : '<div class="ready-eq ready-eq-none">A corpo libero</div>';
+  list.innerHTML='<div class="ready-eq-hd">Attrezzi necessari</div>'+items;
+  document.getElementById('ui-ready').style.display='flex';
+  loadVideo('');
+}
+// beginBlock = avvio reale della sezione (ex initBlock)
+function beginBlock() {
+  const block=WORKOUT[blockIdx];
+  if(!block){ showDone(); return; }
+  document.getElementById('ui-ready').style.display='none';
   exIdx=0; roundNum=1; amrapCycleIdx=0; exerciseRound=1;
   if(block.type==='AMRAP'||block.type==='CIRCUIT'||block.type==='EMOM') {
     state='AMRAP'; secs=block.totalTime;
@@ -414,7 +467,7 @@ function announceTransition(preBlock){
 
 // tick = wrapper di tickCore: rileva i cambi di fase, suona i beep e annuncia
 function tick(){
-  if(paused) return;
+  if(paused || state==='READY') return;   // in 'PRONTI' il timer è fermo finché non si preme INIZIA
   const preBlock = blockIdx;
   const pre = state+'|'+blockIdx+'|'+exIdx+'|'+roundNum+'|'+exerciseRound;
   tickCore();
@@ -428,6 +481,15 @@ function tick(){
     if(b && !(b.type==='FOR_TIME' && b.timeCap===0)) beepCountdown();
   }
 }
+
+// Tasto INIZIA della schermata "PRONTI": avvia la sezione (col gesto si sblocca l'audio)
+document.getElementById('ready-play').addEventListener('click',function(){
+  ensureAudio();
+  beginBlock();
+  beepWork();
+  const b=WORKOUT[blockIdx];
+  if(b){ if(b.type==='INTERVAL'||b.type==='TABATA'){ const ex=b.exercises[exIdx]; if(ex) speak(ex.name,'en'); } else { speak(b.sectionName,'it'); } }
+});
 
 document.getElementById('snd-btn').addEventListener('click',function(){
   soundOn=!soundOn; ensureAudio();

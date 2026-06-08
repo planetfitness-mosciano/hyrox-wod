@@ -17,3 +17,8 @@ signedUrl: SCALAR/URL
 uploadDetails: OBJECT/MediaUploadDetails
 allSubtitles: LIST/?
 subtitles: OBJECT/Subtitle
+
+=== Equipment ===
+id: NON_NULL/?
+name: NON_NULL/?
+lessons: LIST/?
