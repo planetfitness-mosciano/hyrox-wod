@@ -1046,12 +1046,12 @@ function buildTimerMobileHtml(lesson, isoDate, videoField) {
   const { WORKOUT } = buildWorkoutData(lesson, videoField);
 
   const fixPath = u => (typeof u === 'string') ? u.replace(/^\.\//, '../') : u;
-  const MOBILE = WORKOUT.map(b => Object.assign({}, b, {
-    exercises: b.exercises.map(ex => Object.assign({}, ex, {
-      videoUrl: fixPath(ex.videoUrl),
-      videoUrlPermanent: fixPath(ex.videoUrlPermanent)
-    }))
-  }));
+  const fixEx = ex => Object.assign({}, ex, { videoUrl: fixPath(ex.videoUrl), videoUrlPermanent: fixPath(ex.videoUrlPermanent) });
+  const MOBILE = WORKOUT.map(b => {
+    const nb = Object.assign({}, b, { exercises: b.exercises.map(fixEx) });
+    if (b.steps) nb.steps = b.steps.map(st => Object.assign({}, st, { exercises: st.exercises.map(fixEx) }));
+    return nb;
+  });
   const workoutJson = JSON.stringify(MOBILE);
 
   return `<!DOCTYPE html>
