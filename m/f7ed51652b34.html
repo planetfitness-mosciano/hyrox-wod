@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- generated:2026-06-08T13:25:34.984Z -->
+<!-- generated:2026-06-08T13:50:19.736Z -->
 <html lang="it"><head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
@@ -41,6 +41,9 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;color:#fff;font
 .ivx-n{font-weight:900;font-size:6.6vh;line-height:.95;color:#fff}
 .int-exname.multi .ivx-n{font-size:4.4vh}
 .ivx-m{font-weight:800;font-size:2.3vh;letter-spacing:.05em;color:#FFE500;margin-top:3px}
+.int-exname.multi .ivx{opacity:.4;-webkit-transition:opacity .3s;transition:opacity .3s}
+.int-exname.multi .ivx.active{opacity:1}
+.int-tbox{display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column}
 .int-exname.multi .ivx-m{font-size:2vh}
 .int-label{font-weight:900;font-size:4vh;letter-spacing:.25em;color:#FFE500;text-transform:uppercase;line-height:1}
 .int-weight{font-weight:800;font-size:18px;letter-spacing:.12em;color:#FFE500;text-transform:uppercase;margin-bottom:4px}
@@ -94,6 +97,12 @@ video.ex-video{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:
   .int-exname.multi .ivx-m{font-size:1.6vh}
   .int-label{font-size:2.4vh}
   .int-timer{font-size:9vh}
+  /* INTERVAL/TABATA in verticale: due colonne (esercizi a sx, timer a dx) per sfruttare la larghezza */
+  #ui-interval{-webkit-flex-direction:row;flex-direction:row;-webkit-flex-wrap:wrap;flex-wrap:wrap;-webkit-align-items:center;align-items:center;-webkit-align-content:center;align-content:center}
+  #ui-interval .int-pos{-webkit-flex-basis:100%;flex-basis:100%;width:100%}
+  #ui-interval .int-next-badge{-webkit-flex-basis:100%;flex-basis:100%}
+  #ui-interval .int-exname{-webkit-flex:1 1 50%;flex:1 1 50%;min-width:0;-webkit-justify-content:center;justify-content:center;padding-bottom:0}
+  #ui-interval .int-tbox{-webkit-flex:0 0 auto;flex:0 0 auto;margin-left:auto;text-align:right;-webkit-align-items:flex-end;align-items:flex-end}
 }
 </style>
 </head>
@@ -125,9 +134,11 @@ video.ex-video{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:
         <span class="int-next-badge" id="int-next-badge" style="display:none">PROSSIMO</span>
         <div class="int-exname" id="int-exname">&mdash;</div>
         <div class="int-weight" id="int-weight" style="display:none"></div>
-        <span class="int-label" id="int-label">LAVORO</span>
-        <div class="int-timer" id="int-timer">00:00</div>
-        <span class="int-round" id="int-round">ROUND 1</span>
+        <div class="int-tbox">
+          <span class="int-label" id="int-label">LAVORO</span>
+          <div class="int-timer" id="int-timer">00:00</div>
+          <span class="int-round" id="int-round">ROUND 1</span>
+        </div>
       </div>
     </div>
     <div class="video-wrap">
@@ -270,25 +281,45 @@ function curStationFirstName(block){
   if(block.type==='INTERVAL' && block.steps){ const st=block.steps[exIdx % block.steps.length]; return (st&&st.exercises[0])?st.exercises[0].name:''; }
   const ex=block.exercises[exIdx]; return ex?ex.name:'';
 }
-// INTERVAL = rotazione a stazioni: mostra TUTTI gli esercizi della stazione (con reps/RPE/peso)
+// INTERVAL = rotazione a stazioni: mostra TUTTI gli esercizi della stazione (reps/RPE/peso).
+// Se la stazione ha più esercizi, il video CICLA tra loro (~8s ciascuno) evidenziando l'attivo.
+let _intKey=null, _intCyc=-1;
 function renderInterval(block){
   const isWork=(state==='WORK');
   const n=block.steps.length;
-  const st = isWork ? block.steps[exIdx % n] : block.steps[(exIdx+1) % n];
+  const stIdx = isWork ? (exIdx % n) : ((exIdx+1) % n);
+  const st = block.steps[stIdx];
   if(!st) return;
-  const nb=document.getElementById('int-next-badge'); if(nb) nb.style.display=isWork?'none':'inline-block';
-  document.getElementById('int-pos').textContent='INTERVALLO '+(exIdx+1)+' / '+block.intervals;
+  const key = stIdx+'|'+(isWork?'W':'R');
   const exEl=document.getElementById('int-exname');
-  exEl.classList.toggle('multi', st.exercises.length>1);
-  exEl.innerHTML = st.exercises.map(function(e){
-    const meta=[(e.metric && e.metric!=='\u2014')?e.metric:'', e.rpe?('RPE '+e.rpe):'', e.weight||''].filter(Boolean).join(' \u00b7 ');
-    return '<div class="ivx"><div class="ivx-n">'+e.name.toUpperCase()+'</div>'+(meta?'<div class="ivx-m">'+meta+'</div>':'')+'</div>';
-  }).join('');
-  const iw=document.getElementById('int-weight'); if(iw) iw.style.display='none';
+  if(_intKey!==key){
+    _intKey=key; _intCyc=-1;
+    const nb=document.getElementById('int-next-badge'); if(nb) nb.style.display=isWork?'none':'inline-block';
+    document.getElementById('int-pos').textContent='INTERVALLO '+(exIdx+1)+' / '+block.intervals;
+    exEl.classList.toggle('multi', st.exercises.length>1);
+    exEl.innerHTML = st.exercises.map(function(e,i){
+      const meta=[(e.metric && e.metric!=='\u2014')?e.metric:'', e.rpe?('RPE '+e.rpe):'', e.weight||''].filter(Boolean).join(' \u00b7 ');
+      return '<div class="ivx" id="ivx-'+i+'"><div class="ivx-n">'+e.name.toUpperCase()+'</div>'+(meta?'<div class="ivx-m">'+meta+'</div>':'')+'</div>';
+    }).join('');
+    const iw=document.getElementById('int-weight'); if(iw) iw.style.display='none';
+  }
   document.getElementById('int-label').textContent=isWork?'LAVORO':'RIPOSO';
   document.getElementById('int-timer').textContent=fmtTime(secs);
   document.getElementById('int-round').textContent='ROUND '+(exIdx+1)+' / '+block.intervals;
-  const fe=st.exercises[0]; if(fe && (fe.videoUrl||fe.videoUrlPermanent)) loadVideo(fe.videoUrl, fe.videoUrlPermanent);
+  // ciclo video tra gli esercizi della stazione (solo in WORK e se multi)
+  let cyc=0;
+  if(isWork && st.exercises.length>1){
+    const elapsed=block.workTime-secs;
+    cyc=Math.floor(elapsed/8) % st.exercises.length;
+  }
+  if(_intCyc!==cyc){
+    _intCyc=cyc;
+    if(st.exercises.length>1){
+      for(let i=0;i<st.exercises.length;i++){ const el=document.getElementById('ivx-'+i); if(el) el.classList.toggle('active', i===cyc); }
+    }
+    const fe=st.exercises[cyc]||st.exercises[0];
+    if(fe && (fe.videoUrl||fe.videoUrlPermanent)) loadVideo(fe.videoUrl, fe.videoUrlPermanent);
+  }
 }
 function updateIntervalDisplay(block) {
   if(block.type==='INTERVAL' && block.steps){ renderInterval(block); return; }
@@ -350,7 +381,7 @@ function beginBlock() {
   const block=WORKOUT[blockIdx];
   if(!block){ showDone(); return; }
   document.getElementById('ui-ready').style.display='none';
-  exIdx=0; roundNum=1; amrapCycleIdx=0; exerciseRound=1;
+  exIdx=0; roundNum=1; amrapCycleIdx=0; exerciseRound=1; _intKey=null;
   if(block.type==='AMRAP'||block.type==='CIRCUIT'||block.type==='EMOM') {
     state='AMRAP'; secs=block.totalTime;
     showAmrap(block);
