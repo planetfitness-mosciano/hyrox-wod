@@ -499,6 +499,12 @@ function buildWorkoutData(lesson, videoField) {
     const wt     = (s.workTime > 0) ? s.workTime : 0;
     const rt     = (s.restTime > 0) ? s.restTime : 0;
 
+    // Sanifica: scarta sectionExercises senza esercizio collegato (evita
+    // ex.exercise.name su null). Mutiamo i gruppi così anche le stazioni
+    // INTERVAL (più sotto) usano la lista pulita.
+    for (const g of (s.sectionExerciseGroups || []))
+      g.sectionExercises = (g.sectionExercises || []).filter(ex => ex && ex.exercise);
+
     const allEx = [];
     for (const g of s.sectionExerciseGroups)
       for (const ex of g.sectionExercises)
@@ -1820,12 +1826,17 @@ async function getTodayLessonId(token) {
     }
   }`);
 
-  const todays = data.allLessonSchedules
+  // Scarta le voci di calendario senza lezione collegata (slot vuoti) o senza
+  // data: hanno lesson:null e farebbero crashare lesson.lesson.name.
+  const schedules = (data.allLessonSchedules || [])
+    .filter(s => s && s.lesson && s.lesson.id && s.scheduledAt);
+
+  const todays = schedules
     .filter(s => s.scheduledAt.startsWith(isoDate));
 
   if (todays.length === 0) {
     // Nessun WOD per oggi: usa il più recente disponibile (fallback)
-    const all = data.allLessonSchedules;
+    const all = schedules;
     if (all.length === 0) throw new Error('Nessuna lezione disponibile nel calendario');
     const fallback = all[0];
     const fallbackDate = fallback.scheduledAt.substring(0, 10);
@@ -2140,6 +2151,16 @@ async function main() {
   const exFieldsQuery = videoField ? [videoField.query, videoField.equipmentQuery].filter(Boolean).join(' ') : '';
   const lesson = await getLessonDetails(token, lessonId, exFieldsQuery);
   console.log(`Lezione: "${lesson.name}" — ${lesson.sections.length} sezioni`);
+
+  // Sanifica la lesson PRIMA di ogni build: scarta gruppi/esercizi senza
+  // esercizio collegato. Evita ex.exercise.name su null in buildHtml,
+  // buildTimerHtml e buildTimerMobileHtml.
+  for (const sec of (lesson.sections || [])) {
+    for (const g of (sec.sectionExerciseGroups || []))
+      g.sectionExercises = (g.sectionExercises || []).filter(ex => ex && ex.exercise);
+    sec.sectionExerciseGroups = (sec.sectionExerciseGroups || [])
+      .filter(g => g.sectionExercises && g.sectionExercises.length > 0);
+  }
 
   // Step 5: Traduci descrizione in italiano
   if (lesson.description) {
