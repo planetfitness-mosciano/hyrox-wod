@@ -1826,6 +1826,16 @@ async function getTodayLessonId(token) {
     }
   }`);
 
+  // DIAGNOSTICA: dump grezzo di ciò che restituisce l'API (visibile nel log
+  // Actions). Da rimuovere una volta capito il problema del calendario.
+  const raw = data.allLessonSchedules || [];
+  console.log(`DEBUG allLessonSchedules: ${raw.length} voci`);
+  console.log('DEBUG dump:', JSON.stringify(raw.map(s => ({
+    scheduledAt: s && s.scheduledAt,
+    lessonId: s && s.lesson && s.lesson.id,
+    lessonName: s && s.lesson && s.lesson.name
+  }))));
+
   // Scarta le voci di calendario senza lezione collegata (slot vuoti) o senza
   // data: hanno lesson:null e farebbero crashare lesson.lesson.name.
   const schedules = (data.allLessonSchedules || [])
