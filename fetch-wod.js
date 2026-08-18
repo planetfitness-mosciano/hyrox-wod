@@ -1819,45 +1819,49 @@ async function getTodayLessonId(token) {
   // Italy timezone date (YYYY-MM-DD)
   const isoDate = new Intl.DateTimeFormat('sv', { timeZone: 'Europe/Rome' }).format(new Date());
 
+  // HYROX pre-crea molti slot di calendario FUTURI senza lezione assegnata
+  // (lesson:null) e l'API li restituisce per primi (ordinati dal più futuro).
+  // Con first:20 questi slot vuoti nascondevano il WOD reale di oggi, che è
+  // più in basso nella lista. Chiediamo molte più voci per includerlo.
   const data = await gql(token, `{
-    allLessonSchedules(filters: { first: 20 }) {
+    allLessonSchedules(filters: { first: 500 }) {
       id scheduledAt
       lesson { id name }
     }
   }`);
 
-  // DIAGNOSTICA: dump grezzo di ciò che restituisce l'API (visibile nel log
-  // Actions). Da rimuovere una volta capito il problema del calendario.
   const raw = data.allLessonSchedules || [];
-  console.log(`DEBUG allLessonSchedules: ${raw.length} voci`);
-  console.log('DEBUG dump:', JSON.stringify(raw.map(s => ({
-    scheduledAt: s && s.scheduledAt,
-    lessonId: s && s.lesson && s.lesson.id,
-    lessonName: s && s.lesson && s.lesson.name
-  }))));
 
-  // Scarta le voci di calendario senza lezione collegata (slot vuoti) o senza
-  // data: hanno lesson:null e farebbero crashare lesson.lesson.name.
-  const schedules = (data.allLessonSchedules || [])
-    .filter(s => s && s.lesson && s.lesson.id && s.scheduledAt);
+  // Tieni solo gli slot con una lezione vera assegnata.
+  const schedules = raw
+    .filter(s => s && s.lesson && s.lesson.id && s.scheduledAt)
+    .sort((a, b) => b.scheduledAt.localeCompare(a.scheduledAt)); // recente → vecchio
 
-  const todays = schedules
-    .filter(s => s.scheduledAt.startsWith(isoDate));
-
-  if (todays.length === 0) {
-    // Nessun WOD per oggi: usa il più recente disponibile (fallback)
-    const all = schedules;
-    if (all.length === 0) throw new Error('Nessuna lezione disponibile nel calendario');
-    const fallback = all[0];
-    const fallbackDate = fallback.scheduledAt.substring(0, 10);
-    console.log(`⚠️  Nessun WOD per ${isoDate} — uso il più recente: ${fallback.lesson.name} [${fallbackDate}]`);
-    return { lessonId: fallback.lesson.id, isoDate }; // isoDate resta oggi per la data visualizzata
+  console.log(`Calendario: ${raw.length} slot totali, ${schedules.length} con lezione assegnata`);
+  if (schedules.length) {
+    const s0 = schedules[0], sN = schedules[schedules.length - 1];
+    console.log(`  range lezioni: ${sN.scheduledAt.slice(0,10)} → ${s0.scheduledAt.slice(0,10)}`);
   }
 
-  // Prefer the first result (API returns newest→oldest; within same day, order as returned)
-  const lesson = todays[0];
-  console.log(`WOD di oggi (${isoDate}): ${lesson.lesson.name} [${lesson.lesson.id}]`);
-  return { lessonId: lesson.lesson.id, isoDate };
+  if (schedules.length === 0) {
+    throw new Error('Nessuna lezione assegnata nel calendario HYROX (solo slot vuoti). '
+      + 'Probabile stop dei contenuti lato HYROX per questo club.');
+  }
+
+  // 1) WOD di oggi, se assegnato.
+  const todays = schedules.filter(s => s.scheduledAt.startsWith(isoDate));
+  if (todays.length > 0) {
+    const l = todays[0];
+    console.log(`WOD di oggi (${isoDate}): ${l.lesson.name} [${l.lesson.id}]`);
+    return { lessonId: l.lesson.id, isoDate };
+  }
+
+  // 2) Fallback: la lezione assegnata più recente NON futura (data ≤ oggi).
+  const past = schedules.filter(s => s.scheduledAt.slice(0, 10) <= isoDate);
+  const pick = past[0] || schedules[schedules.length - 1]; // se tutte future, la più vicina
+  const pickDate = pick.scheduledAt.slice(0, 10);
+  console.log(`⚠️  Nessun WOD per ${isoDate} — uso la più recente disponibile: ${pick.lesson.name} [${pickDate}]`);
+  return { lessonId: pick.lesson.id, isoDate };
 }
 
 
