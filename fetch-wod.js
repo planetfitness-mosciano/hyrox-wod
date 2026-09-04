@@ -1962,7 +1962,34 @@ async function getLessonDetails(token, lessonId, videoFieldQuery = '') {
 
 // ─── Puppeteer: login + token capture ────────────────────────────────────────
 
-async function captureToken() {
+// Racconta cosa aveva davanti il browser quando il login non è andato a buon fine.
+// I log del run su GitHub restano leggibili anche quando l'artifact non viene
+// raccolto, quindi qui finisce tutto: indirizzo, testo della pagina e foto.
+async function dumpLoginDebug(page, motivo) {
+  console.log(`--- DEBUG LOGIN (${motivo}) ---`);
+  try {
+    console.log('URL finale:', page.url());
+  } catch (e) {
+    console.log('URL finale: non leggibile —', e.message);
+  }
+  try {
+    const testo = await page.evaluate(() =>
+      (document.body ? document.body.innerText : '').replace(/\s+/g, ' ').trim().slice(0, 800)
+    );
+    console.log('Testo visibile:', testo || '(pagina vuota)');
+  } catch (e) {
+    console.log('Testo visibile: non leggibile —', e.message);
+  }
+  try {
+    await page.screenshot({ path: 'debug-login.png', fullPage: true });
+    console.log('Screenshot salvato in debug-login.png');
+  } catch (e) {
+    console.log('Screenshot non riuscito:', e.message);
+  }
+  console.log('--- fine DEBUG LOGIN ---');
+}
+
+async function captureTokenOnce() {
   console.log('Avvio Puppeteer...');
   const browser = await puppeteer.launch({
     headless: 'new',
@@ -1974,87 +2001,99 @@ async function captureToken() {
     ]
   });
 
-  const page = await browser.newPage();
+  let page;
+  try {
+    page = await browser.newPage();
 
-  // Anti-bot: nascondi webdriver
-  await page.evaluateOnNewDocument(() => {
-    Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-  });
-  await page.setViewport({ width: 1366, height: 768 });
-  await page.setUserAgent(
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
-  );
+    // Anti-bot: nascondi webdriver
+    await page.evaluateOnNewDocument(() => {
+      Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+    });
+    await page.setViewport({ width: 1366, height: 768 });
+    await page.setUserAgent(
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+    );
 
-  // Intercept a livello di rete: cattura il Bearer token da QUALSIASI richiesta HTTP
-  // (più affidabile di window.fetch injection che dipende dalla SPA)
-  let capturedToken = null;
-  await page.setRequestInterception(true);
-  page.on('request', req => {
-    const auth = req.headers()['authorization'];
-    if (auth && auth.startsWith('Bearer ')) capturedToken = auth.slice(7);
-    req.continue();
-  });
+    // Intercept a livello di rete: cattura il Bearer token da QUALSIASI richiesta HTTP
+    // (più affidabile di window.fetch injection che dipende dalla SPA)
+    let capturedToken = null;
+    await page.setRequestInterception(true);
+    page.on('request', req => {
+      const auth = req.headers()['authorization'];
+      if (auth && auth.startsWith('Bearer ')) capturedToken = auth.slice(7);
+      req.continue();
+    });
 
-  // IMPORTANTE: includi redirect_to già nel login iniziale.
-  // Se navigassimo prima senza redirect_to e poi tornassimo con redirect_to
-  // da utente già autenticato, il portale ignora il parametro e NON completa l'SSO.
-  const loginUrl = `${PORTAL}?redirect_to=${encodeURIComponent(HUB + '/portal-authorization')}`;
-  console.log('Apertura login (con redirect_to hub)...');
-  await page.goto(loginUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-  await page.waitForSelector('input[placeholder="Email"]', { timeout: 15000 });
+    // IMPORTANTE: includi redirect_to già nel login iniziale.
+    // Se navigassimo prima senza redirect_to e poi tornassimo con redirect_to
+    // da utente già autenticato, il portale ignora il parametro e NON completa l'SSO.
+    const loginUrl = `${PORTAL}?redirect_to=${encodeURIComponent(HUB + '/portal-authorization')}`;
+    console.log('Apertura login (con redirect_to hub)...');
+    await page.goto(loginUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.waitForSelector('input[placeholder="Email"]', { timeout: 15000 });
 
-  await page.click('input[placeholder="Email"]');
-  await page.type('input[placeholder="Email"]', EMAIL, { delay: 60 });
-  await page.click('input[placeholder="Password"]');
-  await page.type('input[placeholder="Password"]', PASSWORD, { delay: 60 });
+    await page.click('input[placeholder="Email"]');
+    await page.type('input[placeholder="Email"]', EMAIL, { delay: 60 });
+    await page.click('input[placeholder="Password"]');
+    await page.type('input[placeholder="Password"]', PASSWORD, { delay: 60 });
 
-  console.log('Submit login...');
-  // Avvia navigazione e pressione Enter in parallelo per evitare race condition
-  await Promise.all([
-    page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 60000 }),
-    page.keyboard.press('Enter'),
-  ]);
-  console.log('URL dopo submit:', page.url());
+    // Funzione di check: siamo sull'hub e fuori da portal-authorization?
+    const onHub = () =>
+      window.location.origin === 'https://performancehub.hyrox365.com' &&
+      !window.location.pathname.includes('/portal-authorization');
 
-  // Funzione di check: siamo sull'hub e fuori da portal-authorization?
-  const onHub = () =>
-    window.location.origin === 'https://performancehub.hyrox365.com' &&
-    !window.location.pathname.includes('/portal-authorization');
+    console.log('Submit login...');
+    await page.keyboard.press('Enter');
+    console.log('URL dopo submit:', page.url());
 
-  // Se il portale ha già completato l'SSO e siamo sull'hub, procedi.
-  // Altrimenti aspetta (il portale potrebbe fare redirect JS asincrono).
-  if (!(await page.evaluate(onHub))) {
-    console.log('Aspettando SSO su performancehub... (URL corrente:', page.url(), ')');
+    // Non si aspetta più una navigazione: il portale è una SPA e può portarci
+    // sull'hub senza ricaricare la pagina, e in quel caso waitForNavigation resta
+    // in attesa fino al timeout anche se il login è riuscito. Si aspetta invece
+    // il risultato — essere sull'hub — che vale sia col ricaricamento sia senza.
+    console.log('Aspettando SSO su performancehub...');
+    await page.waitForFunction(onHub, { timeout: 90000, polling: 500 });
+    console.log('Su performancehub:', page.url());
+
+    // Naviga a /workouts per triggerare le chiamate GraphQL autenticate
+    console.log('Navigazione a /workouts...');
+    await page.goto(HUB + '/workouts', { waitUntil: 'domcontentloaded', timeout: 30000 });
+
+    // Aspetta token (intercettato a livello di rete, max 20s)
+    const deadline = Date.now() + 20000;
+    while (!capturedToken && Date.now() < deadline) {
+      await new Promise(r => setTimeout(r, 200));
+    }
+
+    if (!capturedToken) {
+      throw new Error('Token non catturato entro 20s: nessuna richiesta GraphQL autenticata su /workouts');
+    }
+
+    console.log('Token catturato.');
+    return capturedToken;
+  } catch (e) {
+    if (page) await dumpLoginDebug(page, e.message);
+    throw e;
+  } finally {
+    await browser.close();
+  }
+}
+
+// Dal 31/08/2026 il portale HYROX ogni tanto non risponde al login, e il giro
+// successivo passa senza che sia cambiato niente: si riprova una volta prima di
+// dichiarare l'errore, così un intoppo momentaneo non lascia gli schermi fermi
+// al WOD di ieri.
+async function captureToken() {
+  const TENTATIVI = 2;
+  for (let n = 1; n <= TENTATIVI; n++) {
     try {
-      await page.waitForFunction(onHub, { timeout: 60000, polling: 500 });
+      return await captureTokenOnce();
     } catch (e) {
-      console.log('TIMEOUT SSO — URL finale:', page.url());
-      await page.screenshot({ path: 'debug-login.png', fullPage: true });
-      await browser.close();
-      throw e;
+      if (n === TENTATIVI) throw e;
+      console.log(`Login fallito al tentativo ${n} di ${TENTATIVI}: ${e.message}`);
+      console.log('Riprovo fra 20 secondi...');
+      await new Promise(r => setTimeout(r, 20000));
     }
   }
-  console.log('Su performancehub:', page.url());
-
-  // Naviga a /workouts per triggerare le chiamate GraphQL autenticate
-  console.log('Navigazione a /workouts...');
-  await page.goto(HUB + '/workouts', { waitUntil: 'domcontentloaded', timeout: 30000 });
-
-  // Aspetta token (intercettato a livello di rete, max 20s)
-  const deadline = Date.now() + 20000;
-  while (!capturedToken && Date.now() < deadline) {
-    await new Promise(r => setTimeout(r, 200));
-  }
-
-  if (!capturedToken) {
-    await page.screenshot({ path: 'debug-login.png', fullPage: true });
-    await browser.close();
-    throw new Error('Token non catturato entro 20s: nessuna richiesta GraphQL autenticata su /workouts');
-  }
-
-  console.log('Token catturato.');
-  await browser.close();
-  return capturedToken;
 }
 
 // ─── Self-host dei video esercizio (elimina la scadenza degli URL firmati) ────
