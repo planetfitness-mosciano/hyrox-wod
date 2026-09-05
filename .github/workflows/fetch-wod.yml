@@ -15,7 +15,9 @@ on:
 jobs:
   update-wod:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # Tre tentativi di login (60s d'attesa l'uno) piu' i video: 10 minuti erano
+    # al limite, 15 lasciano margine senza tenere occupato un runner a vuoto.
+    timeout-minutes: 15
     permissions:
       contents: write
 
@@ -49,20 +51,28 @@ jobs:
           HYROX_PASSWORD: ${{ secrets.HYROX_PASSWORD }}
         run: node fetch-wod.js
 
-      - name: Upload debug screenshot on failure
-        if: failure()
+      # always() e non failure(): da adesso un login mancato lascia il giro verde
+      # quando il WOD di oggi e' gia' sugli schermi, e con failure() la foto di
+      # quei tentativi - proprio quelli da capire - non si sarebbe piu' vista.
+      # Se il login va bene il file non esiste e non viene caricato niente.
+      - name: Upload debug screenshot
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: debug-screenshot
           path: debug-login.png
           if-no-files-found: ignore
+          retention-days: 14
 
       - name: Commit and push
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          mkdir -p videos m
-          git add -A index.html timer.html debug-exercise-fields.txt hls.min.js videos m
+          mkdir -p videos m diagnostica
+          git add -A index.html timer.html debug-exercise-fields.txt hls.min.js videos m diagnostica
+          # Al primo giro dopo questa modifica stato-wod.json ancora non esiste, e
+          # "git add" su un percorso che non c'e' fa fallire il passo per niente.
+          if [ -f stato-wod.json ]; then git add -A stato-wod.json; fi
           git diff --cached --quiet && echo "Nessuna modifica." || \
             git commit -m "chore: WOD aggiornato $(date -u +'%Y-%m-%d %H:%M') UTC"
           git push
