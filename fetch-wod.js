@@ -18,6 +18,9 @@ const HUB       = 'https://performancehub.hyrox365.com';
 const EMAIL     = process.env.HYROX_EMAIL;
 const PASSWORD  = process.env.HYROX_PASSWORD;
 const OUT       = path.join(__dirname, 'index.html');
+const STATO     = path.join(__dirname, 'stato-wod.json');   // che WOD sta sugli schermi
+const DIAG_DIR  = path.join(__dirname, 'diagnostica');
+const DIAGNOSI  = path.join(DIAG_DIR, 'ultimo-errore.txt'); // l'ultimo giro andato male
 const TIMER_OUT = path.join(__dirname, 'timer.html');
 const VIDEO_DIR = path.join(__dirname, 'videos');
 
@@ -335,7 +338,7 @@ function buildHtml(lesson, isoDate, qrDataUrl) {
   });
 
   return `<!DOCTYPE html>
-<!-- generated:${new Date().toISOString()} -->
+<!-- generated:${new Date().toISOString()} wod:${isoDate} -->
 <html lang="it"><head>
 <meta charset="UTF-8">
 <title>HYROX WOD</title>
@@ -1962,24 +1965,31 @@ async function getLessonDetails(token, lessonId, videoFieldQuery = '') {
 
 // ─── Puppeteer: login + token capture ────────────────────────────────────────
 
-// Racconta cosa aveva davanti il browser quando il login non è andato a buon fine.
-// I log del run su GitHub restano leggibili anche quando l'artifact non viene
-// raccolto, quindi qui finisce tutto: indirizzo, testo della pagina e foto.
+// Quello che il browser aveva davanti quando il login non è andato: finisce nel
+// log del run E in ultimaDiagnosiLogin, che poi viene scritta dentro il repo.
+// I log dei run su GitHub NON si aprono senza essere loggati (verificato il
+// 05/09/2026: da fuori tornano 404), quindi il file nel repo è l'unico modo di
+// vedere cosa è successo senza entrare in GitHub.
+let ultimaDiagnosiLogin = '';
+
 async function dumpLoginDebug(page, motivo) {
+  const righe = [];
+  const dire = (t) => { righe.push(t); console.log(t); };
   console.log(`--- DEBUG LOGIN (${motivo}) ---`);
   try {
-    console.log('URL finale:', page.url());
+    dire('URL finale: ' + page.url());
   } catch (e) {
-    console.log('URL finale: non leggibile —', e.message);
+    dire('URL finale: non leggibile — ' + e.message);
   }
   try {
     const testo = await page.evaluate(() =>
       (document.body ? document.body.innerText : '').replace(/\s+/g, ' ').trim().slice(0, 800)
     );
-    console.log('Testo visibile:', testo || '(pagina vuota)');
+    dire('Testo visibile: ' + (testo || '(pagina vuota)'));
   } catch (e) {
-    console.log('Testo visibile: non leggibile —', e.message);
+    dire('Testo visibile: non leggibile — ' + e.message);
   }
+  ultimaDiagnosiLogin = righe.join('\n');
   try {
     await page.screenshot({ path: 'debug-login.png', fullPage: true });
     console.log('Screenshot salvato in debug-login.png');
@@ -2014,14 +2024,22 @@ async function captureTokenOnce() {
       'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
     );
 
-    // Intercept a livello di rete: cattura il Bearer token da QUALSIASI richiesta HTTP
-    // (più affidabile di window.fetch injection che dipende dalla SPA)
+    // Il Bearer token si legge dalle intestazioni delle richieste che il portale
+    // fa da solo: per leggerle basta ASCOLTARE. page.on('request') arriva comunque,
+    // anche senza intercettazione.
+    //
+    // L'intercettazione c'era e adesso non c'è più. È la causa più probabile dei
+    // fallimenti a giri alterni da fine agosto: con setRequestInterception attiva
+    // OGNI richiesta del login SSO (portale → hub/portal-authorization → hub) resta
+    // ferma finché non la lasciamo passare noi, e se una sola si perde per strada
+    // la catena di redirect non arriva mai in fondo e il browser resta sulla pagina
+    // di login. È esattamente quello che si vedeva: nessuna navigazione dopo il
+    // submit, e la stessa identica foto (934.179 byte) nei tre run falliti del 4 e
+    // 5 settembre.
     let capturedToken = null;
-    await page.setRequestInterception(true);
     page.on('request', req => {
       const auth = req.headers()['authorization'];
       if (auth && auth.startsWith('Bearer ')) capturedToken = auth.slice(7);
-      req.continue();
     });
 
     // IMPORTANTE: includi redirect_to già nel login iniziale.
@@ -2042,8 +2060,30 @@ async function captureTokenOnce() {
       window.location.origin === 'https://performancehub.hyrox365.com' &&
       !window.location.pathname.includes('/portal-authorization');
 
-    console.log('Submit login...');
-    await page.keyboard.press('Enter');
+    // Prima il bottone di invio, l'Invio come ripiego: se un giorno il portale
+    // smette di reagire all'Invio dato dentro il campo password, il login
+    // continua a funzionare. Il log dice sempre quale delle due strade ha preso.
+    let inviato = false;
+    try {
+      const handle = await page.evaluateHandle(() => {
+        const etichetta = /^(log ?in|sign ?in|accedi|entra|continua)$/i;
+        return document.querySelector('button[type="submit"], input[type="submit"]')
+            || [...document.querySelectorAll('button')].find(b => etichetta.test((b.textContent || '').trim()))
+            || null;
+      });
+      const bottone = handle.asElement();
+      if (bottone) {
+        console.log('Submit login (clic sul bottone)...');
+        await bottone.click();
+        inviato = true;
+      }
+    } catch (e) {
+      console.log('Bottone di invio non cliccabile (' + e.message + '), uso l\'Invio.');
+    }
+    if (!inviato) {
+      console.log('Submit login (Invio)...');
+      await page.keyboard.press('Enter');
+    }
     console.log('URL dopo submit:', page.url());
 
     // Non si aspetta più una navigazione: il portale è una SPA e può portarci
@@ -2051,7 +2091,7 @@ async function captureTokenOnce() {
     // in attesa fino al timeout anche se il login è riuscito. Si aspetta invece
     // il risultato — essere sull'hub — che vale sia col ricaricamento sia senza.
     console.log('Aspettando SSO su performancehub...');
-    await page.waitForFunction(onHub, { timeout: 90000, polling: 500 });
+    await page.waitForFunction(onHub, { timeout: 60000, polling: 500 });
     console.log('Su performancehub:', page.url());
 
     // Naviga a /workouts per triggerare le chiamate GraphQL autenticate
@@ -2079,19 +2119,21 @@ async function captureTokenOnce() {
 }
 
 // Dal 31/08/2026 il portale HYROX ogni tanto non risponde al login, e il giro
-// successivo passa senza che sia cambiato niente: si riprova una volta prima di
-// dichiarare l'errore, così un intoppo momentaneo non lascia gli schermi fermi
-// al WOD di ieri.
+// successivo passa senza che sia cambiato niente: si riprova due volte, con
+// attese crescenti, prima di dichiarare l'errore. Ogni tentativo riparte da un
+// browser nuovo, quindi non si porta dietro lo stato di quello che si è piantato.
 async function captureToken() {
-  const TENTATIVI = 2;
+  const ATTESE = [15000, 45000]; // fra un tentativo e l'altro
+  const TENTATIVI = ATTESE.length + 1;
   for (let n = 1; n <= TENTATIVI; n++) {
     try {
       return await captureTokenOnce();
     } catch (e) {
       if (n === TENTATIVI) throw e;
+      const attesa = ATTESE[n - 1];
       console.log(`Login fallito al tentativo ${n} di ${TENTATIVI}: ${e.message}`);
-      console.log('Riprovo fra 20 secondi...');
-      await new Promise(r => setTimeout(r, 20000));
+      console.log(`Riprovo fra ${attesa / 1000} secondi...`);
+      await new Promise(r => setTimeout(r, attesa));
     }
   }
 }
@@ -2268,9 +2310,106 @@ async function main() {
   }
   console.log(`✓ pagina mobile → m/${dayToken}.html (${mobileHtml.length} bytes)`);
   console.log('✓ debug-exercise-fields.txt scritto');
+
+  // Cosa stanno mostrando gli schermi, in chiaro. Serve al giro dopo per capire
+  // se un login fallito è un allarme o soltanto un tentativo andato male.
+  fs.writeFileSync(STATO, JSON.stringify({
+    wod: isoDate,
+    aggiornato: new Date().toISOString(),
+    lezione: lesson.name || null,
+  }, null, 2) + '\n', 'utf8');
+  console.log(`✓ stato-wod.json → WOD di ${isoDate}`);
+
+  // Un giro andato bene cancella la diagnosi vecchia: quel file deve parlare
+  // solo dell'ultimo guaio ancora aperto, altrimenti si legge un allarme finito.
+  try { fs.unlinkSync(DIAGNOSI); console.log('✓ diagnostica precedente rimossa'); } catch {}
+}
+
+// ─── Quando è un allarme e quando no ────────────────────────────────────────
+// Dal 31/08/2026 il portale HYROX rifiuta il login a giri alterni: nei 50 giri
+// dal 31/08 al 05/09 ne sono falliti 16 su 50, sparsi a caso nella giornata, e
+// il giro dopo passa quasi sempre. Con il workflow rosso a ogni tentativo
+// mancato, l'email di GitHub arriva una volta su tre e non chiede mai niente a
+// nessuno: dopo una settimana non la si legge più, e il giorno in cui il WOD
+// manca davvero passa liscia insieme alle altre.
+//
+// Quindi il giro è rosso quando il RISULTATO è sbagliato, non quando un
+// tentativo è andato male: rosso solo se gli schermi di Mosciano non stanno
+// mostrando il WOD di oggi. E non prima delle 9 del mattino, perché fino a lì
+// restano i giri di recupero (05:17, 06:47, 09:17 ora italiana).
+//
+// Un tentativo mancato non sparisce comunque: finisce in diagnostica/, che si
+// legge senza entrare in GitHub.
+
+function oggiInItalia() {
+  return new Intl.DateTimeFormat('sv', { timeZone: 'Europe/Rome' }).format(new Date());
+}
+
+function oraInItalia() {
+  return Number(new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Rome', hour: '2-digit', hourCycle: 'h23'
+  }).format(new Date()));
+}
+
+// Il WOD che sta sugli schermi adesso. Prima stato-wod.json; se manca (primo
+// giro dopo questa modifica) la data è dentro index.html, che lo scrive dal
+// commento in testa.
+function wodSugliSchermi() {
+  try {
+    const w = JSON.parse(fs.readFileSync(STATO, 'utf8')).wod;
+    if (w) return w;
+  } catch {}
+  try {
+    const m = fs.readFileSync(OUT, 'utf8').match(/wod:(20\d\d-\d\d-\d\d)/);
+    if (m) return m[1];
+  } catch {}
+  return null;
+}
+
+function scriviDiagnosi(testo) {
+  try {
+    if (!fs.existsSync(DIAG_DIR)) fs.mkdirSync(DIAG_DIR, { recursive: true });
+    fs.writeFileSync(DIAGNOSI, testo, 'utf8');
+    console.log(`Diagnosi scritta in diagnostica/ultimo-errore.txt`);
+  } catch (e) {
+    console.log('Diagnosi non scritta:', e.message);
+  }
 }
 
 main().catch(err => {
   console.error('ERRORE:', err.message);
+
+  const oggi       = oggiInItalia();
+  const pubblicato = wodSugliSchermi();
+  const aggiornato = pubblicato === oggi;
+  const presto     = oraInItalia() < 9;
+  const allarme    = !aggiornato && !presto;
+
+  scriviDiagnosi([
+    'Scritto dal workflow "Fetch WOD". Non si corregge a mano: lo riscrive il',
+    'prossimo giro fallito, e un giro riuscito lo cancella.',
+    '',
+    `Quando:      ${new Date().toISOString()} (${oggi} in Italia, ore ${oraInItalia()})`,
+    `Errore:      ${err.message}`,
+    `Sugli schermi c'è il WOD del: ${pubblicato || '(non si sa)'}`,
+    `Esito:       ${allarme ? 'ALLARME — il giro è rosso e parte l\'email'
+                            : 'tentativo mancato — il giro resta verde'}`,
+    '',
+    ultimaDiagnosiLogin || '(il login non è arrivato a raccogliere niente: '
+      + 'l\'errore sta prima o dopo la pagina di accesso)',
+    '',
+  ].join('\n'));
+
+  if (aggiornato) {
+    console.log(`Gli schermi mostrano già il WOD di oggi (${oggi}): tentativo mancato, non un allarme.`);
+    process.exit(0);
+  }
+  if (presto) {
+    console.log(`Sugli schermi c'è il WOD del ${pubblicato || '(non si sa)'} e non sono ancora le 9: `
+      + 'restano i giri di recupero, non è ancora un allarme.');
+    process.exit(0);
+  }
+  console.error(`Gli schermi di Mosciano sono fermi al WOD del ${pubblicato || '(non si sa)'} `
+    + `e oggi è ${oggi}: questo sì che va guardato.`);
   process.exit(1);
 });
