@@ -1,7 +1,7 @@
 Scritto dal workflow "Fetch WOD". Non si corregge a mano: lo riscrive il
 prossimo giro fallito, e un giro riuscito lo cancella.
 
-Quando:      2026-09-12T08:54:08.709Z (2026-09-12 in Italia, ore 10)
+Quando:      2026-09-12T11:40:51.546Z (2026-09-12 in Italia, ore 13)
 Errore:      Waiting failed: 60000ms exceeded
 Sugli schermi c'è il WOD del: 2026-09-12
 Esito:       tentativo mancato — il giro resta verde
