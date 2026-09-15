@@ -350,6 +350,7 @@ function buildHtml(lesson, isoDate, qrDataUrl) {
 <!-- generated:${new Date().toISOString()} wod:${isoDate} -->
 <html lang="it"><head>
 <meta charset="UTF-8">
+<meta name="robots" content="noindex, nofollow">
 <title>HYROX WOD</title>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800;900&family=Barlow:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
@@ -643,6 +644,7 @@ function buildTimerHtml(lesson, isoDate, videoField, qrDataUrl) {
 <!-- generated:${new Date().toISOString()} -->
 <html lang="it"><head>
 <meta charset="UTF-8">
+<meta name="robots" content="noindex, nofollow">
 <title>HYROX Timer — Planet Fitness Mosciano</title>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;400;600;700;800;900&display=swap" rel="stylesheet">
 <script src="./hls.min.js"></script>
