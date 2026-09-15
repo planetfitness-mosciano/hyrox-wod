@@ -1,8 +1,8 @@
 Scritto dal workflow "Fetch WOD". Non si corregge a mano: lo riscrive il
 prossimo giro fallito, e un giro riuscito lo cancella.
 
-Quando:      2026-09-15T13:48:32.769Z (2026-09-15 in Italia, ore 15)
-Errore:      GraphQL HTTP 401
+Quando:      2026-09-15T14:01:49.284Z (2026-09-15 in Italia, ore 16)
+Errore:      GraphQL HTTP 400 da onefiit-api.platform.onefiit.com — {"errors":[{"message":"Cannot query field \"intensity\" on type \"Lesson\".","extensions":{"code":"GRAPHQL_VALIDATION_FAILED"}}]}
 Sugli schermi c'è il WOD del: 2026-09-12
 Avviso:      sì, si apre una segnalazione su GitHub
 
@@ -10,4 +10,5 @@ Cosa fare: per ora niente. Il bot riprova alla prossima partenza, al più
 tardi la notte prossima. Se la segnalazione è ancora aperta domani, va letto
 il registro del giro in Actions.
 
-(il login non è arrivato a raccogliere niente: l'errore sta prima o dopo la pagina di accesso)
+Login riuscito. Dati chiesti a: https://onefiit-api.platform.onefiit.com/graphql
+Richieste con token: https://onefiit-api.platform.onefiit.com/graphql
