@@ -2,28 +2,44 @@ name: Fetch WOD
 
 on:
   schedule:
-    # Minuto 17 e non 0: i job al minuto 0 sono i più ritardati/scartati da GitHub
-    - cron: '17 3 * * *'   # 05:17 IT (estate) — WOD del giorno
-    - cron: '47 4 * * *'   # 06:47 IT — recupero se il primo salta
-    - cron: '17 7 * * *'   # 09:17 IT
-    - cron: '17 10 * * *'  # 12:17 IT
-    - cron: '17 13 * * *'  # 15:17 IT
-    - cron: '17 16 * * *'  # 18:17 IT
-    - cron: '17 18 * * *'  # 20:17 IT
+    # Il WOD cambia una volta al giorno e basta UN login, di notte (decisione di
+    # Giuliano del 15/09/2026). Le partenze sono più d'una solo perché GitHub non
+    # parte all'ora scritta: a settembre 2026 i giri partivano con 3-7 ore di
+    # ritardo, o saltavano. La prima partenza che riesce fa il login e pubblica;
+    # le altre trovano il WOD di oggi già sugli schermi e si chiudono senza login
+    # (il controllo è all'inizio di fetch-wod.js).
+    # Orari in UTC: in Italia +2 ore d'estate, +1 d'inverno. Tutti dopo la
+    # mezzanotte italiana in tutte e due le stagioni.
+    # Minuto 17 e non 0: i job al minuto 0 sono i più ritardati/scartati da GitHub.
+    - cron: '17 0 * * *'   # 02:17 IT d'estate · 01:17 d'inverno
+    - cron: '17 1 * * *'   # 03:17 · 02:17
+    - cron: '17 2 * * *'   # 04:17 · 03:17
+    - cron: '17 3 * * *'   # 05:17 · 04:17
+    - cron: '47 4 * * *'   # 06:47 · 05:47
+    - cron: '17 7 * * *'   # 09:17 · 08:17 — se il WOD manca ancora, parte l'avviso
   workflow_dispatch: {}
+
+# Due partenze che GitHub fa arrivare insieme non devono fare due login: la
+# seconda aspetta che la prima finisca. Per questo il checkout prende main com'è
+# in quel momento, e non il commit di quando GitHub ha creato il giro.
+concurrency:
+  group: fetch-wod
+  cancel-in-progress: false
 
 jobs:
   update-wod:
     runs-on: ubuntu-latest
-    # Tre tentativi di login (60s d'attesa l'uno) piu' i video: 10 minuti erano
-    # al limite, 15 lasciano margine senza tenere occupato un runner a vuoto.
+    # Un tentativo di login (al massimo un minuto d'attesa) più i video.
     timeout-minutes: 15
     permissions:
       contents: write
+      issues: write
 
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+        with:
+          ref: main
 
       - name: Setup Node.js 22
         uses: actions/setup-node@v4
@@ -45,16 +61,16 @@ jobs:
       - name: Install ffmpeg (ricodifica video)
         run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
 
+      # fetch-wod.js lascia le righe esito= e avviso= per i passi qui sotto.
       - name: Fetch WOD and generate index.html + timer.html
+        id: wod
         env:
           HYROX_EMAIL:    ${{ secrets.HYROX_EMAIL }}
           HYROX_PASSWORD: ${{ secrets.HYROX_PASSWORD }}
         run: node fetch-wod.js
 
-      # always() e non failure(): da adesso un login mancato lascia il giro verde
-      # quando il WOD di oggi e' gia' sugli schermi, e con failure() la foto di
-      # quei tentativi - proprio quelli da capire - non si sarebbe piu' vista.
-      # Se il login va bene il file non esiste e non viene caricato niente.
+      # always(): la foto del login mancato serve anche quando il giro resta
+      # verde. Se il login va bene il file non esiste e non viene caricato niente.
       - name: Upload debug screenshot
         if: always()
         uses: actions/upload-artifact@v4
@@ -65,6 +81,7 @@ jobs:
           retention-days: 14
 
       - name: Commit and push
+        if: steps.wod.outputs.esito == 'pubblicato'
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -76,3 +93,57 @@ jobs:
           git diff --cached --quiet && echo "Nessuna modifica." || \
             git commit -m "chore: WOD aggiornato $(date -u +'%Y-%m-%d %H:%M') UTC"
           git push
+
+      # Fino al 15/09/2026 la diagnosi si salvava solo nei giri andati bene, cioè
+      # mai quando serviva. Qui si salva SOLO diagnostica/: il resto di un giro
+      # fallito (video a metà) non deve arrivare sugli schermi.
+      - name: Salva la diagnosi del giro fallito
+        if: failure() || steps.wod.outputs.esito == 'fallito'
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if [ -d diagnostica ]; then git add -A diagnostica; fi
+          git diff --cached --quiet && echo "Nessuna diagnosi da salvare." || \
+            git commit -m "diagnostica: giro fallito $(date -u +'%Y-%m-%d %H:%M') UTC"
+          git push
+
+      # Una segnalazione sola finché il WOD non torna: se ce n'è già una aperta
+      # non se ne apre un'altra. GitHub la manda per email al proprietario.
+      - name: Avviso su GitHub
+        if: always() && steps.wod.outputs.avviso == 'si'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh label create wod-fermo --color B60205 --force \
+            --description "Gli schermi HYROX non hanno il WOD di oggi"
+          aperti=$(gh issue list --state open --label wod-fermo --json number --jq 'length')
+          if [ "$aperti" != "0" ]; then
+            echo "C'è già una segnalazione aperta: non se ne apre un'altra."
+            exit 0
+          fi
+          sito="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"
+          {
+            echo "@${GITHUB_REPOSITORY_OWNER} gli schermi HYROX di Mosciano non hanno il WOD di oggi."
+            echo
+            echo "- Diagnosi: ${sito}/blob/main/diagnostica/ultimo-errore.txt"
+            echo "- Password del bot: ${sito}/settings/secrets/actions"
+            echo "- Far ripartire il bot: ${sito}/actions/workflows/fetch-wod.yml, pulsante Run workflow"
+            echo
+            echo '```'
+            cat diagnostica/ultimo-errore.txt
+            echo '```'
+          } > "$RUNNER_TEMP/avviso.md"
+          gh issue create --label wod-fermo --body-file "$RUNNER_TEMP/avviso.md" \
+            --title "Schermi HYROX: il WOD di oggi non è arrivato"
+
+      - name: Chiudi l'avviso, il WOD è tornato
+        if: steps.wod.outputs.esito == 'pubblicato'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          aperti=$(gh issue list --state open --label wod-fermo --json number --jq '.[].number' || true)
+          for n in $aperti; do
+            gh issue close "$n" --comment "Risolto: il WOD di oggi è sugli schermi."
+          done
