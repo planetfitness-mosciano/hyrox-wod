@@ -109,6 +109,9 @@ jobs:
 
       # Una segnalazione sola finché il WOD non torna: se ce n'è già una aperta
       # non se ne apre un'altra. GitHub la manda per email al proprietario.
+      # Le aperte si contano con l'elenco delle issue, non con «gh issue list
+      # --label», che passa dalla ricerca di GitHub: la ricerca vede le issue
+      # nuove in ritardo, e il 15/09/2026 la #2 si è aperta 13 minuti dopo la #1.
       - name: Avviso su GitHub
         if: always() && steps.wod.outputs.avviso == 'si'
         env:
@@ -117,7 +120,7 @@ jobs:
         run: |
           gh label create wod-fermo --color B60205 --force \
             --description "Gli schermi HYROX non hanno il WOD di oggi"
-          aperti=$(gh issue list --state open --label wod-fermo --json number --jq 'length')
+          aperti=$(gh api "repos/${GITHUB_REPOSITORY}/issues?state=open&labels=wod-fermo&per_page=100" --jq 'length')
           if [ "$aperti" != "0" ]; then
             echo "C'è già una segnalazione aperta: non se ne apre un'altra."
             exit 0
@@ -143,7 +146,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          aperti=$(gh issue list --state open --label wod-fermo --json number --jq '.[].number' || true)
+          aperti=$(gh api "repos/${GITHUB_REPOSITORY}/issues?state=open&labels=wod-fermo&per_page=100" --jq '.[].number' || true)
           for n in $aperti; do
             gh issue close "$n" --comment "Risolto: il WOD di oggi è sugli schermi."
           done
