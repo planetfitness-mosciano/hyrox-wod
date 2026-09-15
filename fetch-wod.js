@@ -28,7 +28,7 @@ const OUT       = path.join(__dirname, 'index.html');
 const STATO     = path.join(__dirname, 'stato-wod.json');   // che WOD sta sugli schermi
 const DIAG_DIR  = path.join(__dirname, 'diagnostica');
 const DIAGNOSI  = path.join(DIAG_DIR, 'ultimo-errore.txt'); // l'ultimo giro andato male
-const RIFIUTO   = path.join(DIAG_DIR, 'login-rifiutato.txt'); // il giorno in cui HYROX ha rifiutato l'accesso
+const FERMO     = path.join(DIAG_DIR, 'fermo-di-oggi.txt'); // il giorno in cui riprovare da solo non serve, e perché
 const TIMER_OUT = path.join(__dirname, 'timer.html');
 const VIDEO_DIR = path.join(__dirname, 'videos');
 
@@ -279,7 +279,8 @@ function buildHtml(lesson, isoDate, qrDataUrl) {
 
   const totalSections = lesson.sections.length;
   const durStr        = fmtSecs(lesson.duration) || '—';
-  const intLabel      = `${intensityLabel(lesson.intensity)} · RPE ${lesson.intensity}`;
+  const intLabel      = lesson.intensity != null
+    ? `${intensityLabel(lesson.intensity)} · RPE ${lesson.intensity}` : '—';
 
   // Description: truncate if very long
   const desc = (lesson.description || '').replace(/\s+/g,' ').trim();
@@ -1833,157 +1834,195 @@ async function gql(token, query, variables = {}) {
       perche = (await r.text()).replace(/eyJ[\w-]+\.[\w-]+\.[\w-]*/g, '[token]')
         .replace(/\s+/g, ' ').trim().slice(0, 200);
     } catch {}
-    throw new Error(`GraphQL HTTP ${r.status} da ${new URL(graphqlUrl).host}`
+    const e = new Error(`GraphQL HTTP ${r.status} da ${new URL(graphqlUrl).host}`
       + (perche ? ` — ${perche}` : ''));
+    // 4xx = la domanda o il token non vanno bene: rifatta fra un'ora, con un
+    // login in più sull'account dei coach, avrebbe la stessa risposta. Il 5xx
+    // invece può essere un guasto di passaggio di HYROX.
+    e.definitivo = r.status < 500;
+    throw e;
   }
   const json = await r.json();
-  if (json.errors) throw new Error(`GraphQL error: ${json.errors[0].message}`);
+  if (json.errors) {
+    const e = new Error(`GraphQL error: ${json.errors[0].message}`);
+    e.definitivo = true;
+    throw e;
+  }
   return json.data;
 }
 
-async function getTodayLessonId(token) {
-  // Italy timezone date (YYYY-MM-DD)
-  const isoDate = new Intl.DateTimeFormat('sv', { timeZone: 'Europe/Rome' }).format(new Date());
+// Le domande a HYROX sono scritte come quelle del Performance Hub, e usano solo
+// campi che il sito chiede anche lui. Il suo codice è pubblico e si legge senza
+// login: performancehub.hyrox365.com carica main/<impronta>.js, e dentro ci sono
+// le query intere, commenti compresi (HomePage, WorkoutPage, i frammenti).
+// Fino al 15/09/2026 il bot chiedeva le prime 500 voci del calendario senza
+// filtro: sulla piattaforma OneFIIT arrivano solo dal 28/03/2024 al 28/07/2025,
+// e il WOD di oggi non c'era mai.
 
-  // HYROX pre-crea molti slot di calendario FUTURI senza lezione assegnata
-  // (lesson:null) e l'API li restituisce per primi (ordinati dal più futuro).
-  // Con first:20 questi slot vuoti nascondevano il WOD reale di oggi, che è
-  // più in basso nella lista. Chiediamo molte più voci per includerlo.
-  const data = await gql(token, `{
-    allLessonSchedules(filters: { first: 500 }) {
+// Se HYROX non ha il WOD di oggi, si ripiega sulla lezione più recente, ma non
+// più vecchia di tanti giorni. Il ripiego senza limite aveva preso una lezione
+// del luglio 2025. Dal 18/05 al 12/09/2026 la stessa lezione è rimasta due o tre
+// giorni di fila solo due volte (30/06-02/07 e 27-28/07).
+const GIORNI_RIPIEGO = 3;
+
+async function getTodayLessonId(token) {
+  const isoDate = oggiInItalia();
+  const da      = giorniPrima(isoDate, GIORNI_RIPIEGO);
+
+  // Come il campo «wotd» della home del sito: la data è la mezzanotte UTC del
+  // giorno. «recenti» è il calendario degli ultimi giorni, per il ripiego e per
+  // la diagnosi; il sito lo chiede per la settimana con first: 14.
+  const data = await gql(token, `query WodDelGiorno($date: ISODateTime!, $dateRange: DateRange!) {
+    oggi: allLessonSchedules(
+      filters: { first: 1, orderBy: "created_at", direction: asc }
+      condition: { scheduledAt: $date }
+    ) {
       id scheduledAt
       lesson { id name }
     }
-  }`);
+    recenti: allLessonSchedules(
+      filters: { first: 50, orderBy: "scheduled_at", direction: asc }
+      condition: { dateRange: $dateRange }
+    ) {
+      id scheduledAt
+      lesson { id name }
+    }
+  }`, {
+    date: `${isoDate}T00:00:00.000Z`,
+    dateRange: { from: `${da}T00:00:00.000Z`, to: `${isoDate}T23:59:59.999Z` },
+  });
 
-  const raw = data.allLessonSchedules || [];
+  const conLezione = s => s && s.lesson && s.lesson.id;
+  const recenti = (data.recenti || []).filter(s => conLezione(s) && s.scheduledAt
+    && s.scheduledAt.slice(0, 10) <= isoDate);
+  console.log(`Calendario dal ${da} al ${isoDate}: `
+    + (recenti.map(s => `${s.scheduledAt.slice(0, 10)} ${s.lesson.name}`).join(' · ') || 'nessuna lezione'));
 
-  // Tieni solo gli slot con una lezione vera assegnata.
-  const schedules = raw
-    .filter(s => s && s.lesson && s.lesson.id && s.scheduledAt)
-    .sort((a, b) => b.scheduledAt.localeCompare(a.scheduledAt)); // recente → vecchio
-
-  console.log(`Calendario: ${raw.length} slot totali, ${schedules.length} con lezione assegnata`);
-  if (schedules.length) {
-    const s0 = schedules[0], sN = schedules[schedules.length - 1];
-    console.log(`  range lezioni: ${sN.scheduledAt.slice(0,10)} → ${s0.scheduledAt.slice(0,10)}`);
+  const oggi = (data.oggi || []).find(conLezione);
+  if (oggi) {
+    console.log(`WOD di oggi (${isoDate}): ${oggi.lesson.name} [${oggi.lesson.id}]`);
+    return { lessonId: oggi.lesson.id, isoDate };
   }
 
-  if (schedules.length === 0) {
-    throw new Error('Nessuna lezione assegnata nel calendario HYROX (solo slot vuoti). '
-      + 'Probabile stop dei contenuti lato HYROX per questo club.');
+  const ultima = recenti[recenti.length - 1]; // in ordine di data: l'ultima è la più recente
+  if (!ultima) {
+    const e = new Error(`HYROX non ha il WOD di oggi (${isoDate}) e nemmeno una lezione `
+      + `dal ${da}: gli schermi restano sull'ultimo WOD pubblicato.`);
+    e.definitivo = true;
+    e.senzaWod   = true;
+    throw e;
   }
+  console.log(`⚠️  Nessun WOD per ${isoDate} — uso la più recente: ${ultima.lesson.name} `
+    + `[${ultima.scheduledAt.slice(0, 10)}]`);
+  return { lessonId: ultima.lesson.id, isoDate };
+}
 
-  // 1) WOD di oggi, se assegnato.
-  const todays = schedules.filter(s => s.scheduledAt.startsWith(isoDate));
-  if (todays.length > 0) {
-    const l = todays[0];
-    console.log(`WOD di oggi (${isoDate}): ${l.lesson.name} [${l.lesson.id}]`);
-    return { lessonId: l.lesson.id, isoDate };
-  }
-
-  // 2) Fallback: la lezione assegnata più recente NON futura (data ≤ oggi).
-  const past = schedules.filter(s => s.scheduledAt.slice(0, 10) <= isoDate);
-  const pick = past[0] || schedules[schedules.length - 1]; // se tutte future, la più vicina
-  const pickDate = pick.scheduledAt.slice(0, 10);
-  console.log(`⚠️  Nessun WOD per ${isoDate} — uso la più recente disponibile: ${pick.lesson.name} [${pickDate}]`);
-  return { lessonId: pick.lesson.id, isoDate };
+// Il giorno (AAAA-MM-GG) che viene n giorni prima di quello dato.
+function giorniPrima(isoDate, n) {
+  const d = new Date(`${isoDate}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - n);
+  return d.toISOString().slice(0, 10);
 }
 
 
-// ─── Introspection: trova campo video su Exercise ─────────────────────────────
+// ─── Video e attrezzi degli esercizi ──────────────────────────────────────────
+// Fino al 15/09/2026 il bot scopriva questi campi chiedendo a HYROX com'è fatto
+// lo schema (introspection). OneFIIT lo vieta (HTTP 400), e senza quei campi il
+// bot avrebbe pubblicato senza video: i nomi adesso sono fissi, e sono quelli
+// del frammento ExerciseFragment del sito. «equipment» sull'esercizio il sito
+// non lo chiede: se HYROX dice che non esiste, la lezione si richiede senza.
 
-async function getExerciseVideoField(token) {
+const VIDEO_FIELD = {
+  name: 'video', query: 'video { url signedUrl }',
+  videoSubField: 'signedUrl', fallbackSubField: 'url',
+  equipmentQuery: 'equipment { name }', equipmentSubField: 'name',
+};
+
+async function getLessonDetails(token, lessonId) {
   try {
-    // Introspect Exercise AND Video types in una sola query
-    const data = await gql(token, `{
-      exerciseType: __type(name: "Exercise") {
-        fields { name type { kind name ofType { kind name } } }
-      }
-      videoType: __type(name: "Video") {
-        fields { name type { kind name } }
-      }
-      equipmentType: __type(name: "Equipment") {
-        fields { name type { kind name } }
-      }
-    }`);
-
-    const exFields  = data.exerciseType?.fields  || [];
-    const vidFields = data.videoType?.fields     || [];
-    const eqFields  = data.equipmentType?.fields || [];
-
-    // Dump debug
-    const exDump  = exFields.map(f => {
-      const k = f.type.kind === 'NON_NULL' ? (f.type.ofType?.kind||'?') : f.type.kind;
-      const t = f.type.kind === 'NON_NULL' ? (f.type.ofType?.name||'?') : (f.type.name||'?');
-      return `${f.name}: ${k}/${t}`;
-    }).join('\n');
-    const vidDump = vidFields.map(f => `${f.name}: ${f.type.kind}/${f.type.name||'?'}`).join('\n');
-    const eqDump  = eqFields.map(f => `${f.name}: ${f.type.kind}/${f.type.name||'?'}`).join('\n') || '(nessun campo / tipo Equipment assente)';
-    const fullDump = `=== Exercise ===\n${exDump}\n\n=== Video ===\n${vidDump}\n\n=== Equipment ===\n${eqDump}`;
-    fs.writeFileSync(path.join(__dirname, 'debug-exercise-fields.txt'), fullDump, 'utf8');
-    console.log(fullDump);
-
-    // Campo attrezzi: cerca un campo "nome" (String) sul tipo Equipment
-    let equipmentQuery = '', equipmentSubField = '';
-    if (exFields.some(f => f.name === 'equipment')) {
-      const cand = ['name','title','label','displayName'];
-      const nameField = eqFields.find(f => cand.includes(f.name) && f.type.name === 'String')
-                     || eqFields.find(f => cand.includes(f.name))
-                     || eqFields.find(f => f.type.name === 'String');
-      if (nameField) { equipmentSubField = nameField.name; equipmentQuery = `equipment { ${nameField.name} }`; }
-      console.log(`Campo attrezzi: ${equipmentQuery || '(nessun campo nome trovato su Equipment)'}`);
-    }
-
-    // Trova campo video sull'Exercise
-    const videoField = exFields.find(f => f.name === 'video');
-    if (!videoField) {
-      console.log('Campo "video" non trovato su Exercise.');
-      return null;
-    }
-
-    // Preferisci signedUrl (CDN con firma temporanea, quello che funziona per playback)
-    // Recupera ENTRAMBI url e signedUrl: url è permanente, signedUrl scade in ~24h
-    const hasSignedUrl = vidFields.some(f => f.name === 'signedUrl');
-    const hasUrl       = vidFields.some(f => f.name === 'url');
-    // Query che recupera entrambi se disponibili
-    const fields = [];
-    if (hasUrl)       fields.push('url');
-    if (hasSignedUrl) fields.push('signedUrl');
-    if (fields.length === 0) fields.push('url'); // fallback sicuro
-    const query = `video { ${fields.join(' ')} }`;
-    console.log(`Campo video: ${query}`);
-    console.log(`Campi Video disponibili: ${vidFields.map(f=>f.name).join(', ')}`);
-    // videoSubField = campo preferito per l'estrazione (signedUrl se fresco, altrimenti url)
-    return { name: 'video', query, videoSubField: 'signedUrl', fallbackSubField: 'url', equipmentQuery, equipmentSubField };
+    return await chiediLezione(token, lessonId, `${VIDEO_FIELD.query} ${VIDEO_FIELD.equipmentQuery}`);
   } catch (e) {
-    console.log('Introspection video field fallita:', e.message);
-    return null;
+    if (!/Cannot query field \\?"equipment\\?" on type \\?"Exercise/.test(e.message)) throw e;
+    console.log('⚠️  Gli esercizi non hanno più il campo degli attrezzi: la lezione si chiede senza.');
+    return await chiediLezione(token, lessonId, VIDEO_FIELD.query);
   }
 }
 
-async function getLessonDetails(token, lessonId, videoFieldQuery = '') {
-  const data = await gql(token, `{
-    lessonById(id: "${lessonId}") {
-      id name description duration intensity
+// Stessa forma della query WorkoutPage del sito: gli esercizi possono stare nei
+// gruppi, nei sottogruppi, o direttamente nella sezione (vedi sistemaEsercizi).
+async function chiediLezione(token, lessonId, campiEsercizio) {
+  const data = await gql(token, `query Lezione($id: LessonId!) {
+    lessonById(id: $id) {
+      id name description duration rpe
       sections(orderBy: DISPLAY_ORDER) {
         id name format duration workTime restTime rounds isRotational isMain notes
+        sectionExercises { ...Esercizio }
         sectionExerciseGroups(orderBy: DISPLAY_ORDER) {
-          id name description duration showTitle notes repeatTimes format
-          sectionExercises {
-            id displayOrder duration rpe description notes
-            detailedMetrics {
-              weight      { min max single }
-              repetitions { min max single }
-              distance    { min max single }
-            }
-            exercise { id name description ${videoFieldQuery} }
+          id name description duration showTitle notes
+          sectionExercises { ...Esercizio }
+          sectionExerciseGroups {
+            id name
+            sectionExercises { ...Esercizio }
           }
         }
       }
     }
-  }`);
-  return data.lessonById;
+  }
+  fragment Esercizio on SectionExercise {
+    id duration rpe description notes
+    detailedMetrics {
+      weight      { min max single }
+      repetitions { min max single }
+      distance    { min max single }
+    }
+    exercise { id name description ${campiEsercizio} }
+  }`, { id: String(lessonId) });
+  const lesson = data.lessonById;
+  if (!lesson) {
+    const e = new Error(`HYROX non restituisce la lezione ${lessonId}.`);
+    e.definitivo = true;
+    throw e;
+  }
+  // Le pagine degli schermi leggono ancora «intensity», il nome di prima di OneFIIT.
+  lesson.intensity = lesson.rpe;
+  return lesson;
+}
+
+// Il bot disegna solo gruppi con i loro esercizi. Qui gli esercizi si mettono
+// dove li mette il sito (funzione della pagina dell'allenamento, 15/09/2026):
+// quelli dei sottogruppi in coda al loro gruppo; quelli diretti della sezione al
+// posto del primo gruppo vuoto, oppure in un gruppo senza titolo in testa.
+function sistemaEsercizi(lesson) {
+  for (const sec of (lesson.sections || [])) {
+    const gruppi = (sec.sectionExerciseGroups || []).map(g => ({
+      ...g,
+      vuoto: !(g.sectionExercises || []).length && !(g.sectionExerciseGroups || []).length,
+      sectionExercises: [
+        ...(g.sectionExercises || []),
+        ...(g.sectionExerciseGroups || []).flatMap(sg => sg.sectionExercises || []),
+      ],
+    }));
+    const diretti = sec.sectionExercises || [];
+    if (diretti.length) {
+      const i = gruppi.findIndex(g => g.vuoto);
+      if (i >= 0) gruppi[i].sectionExercises = diretti;
+      else gruppi.unshift({ id: `${sec.id}_direct`, name: '', showTitle: false, sectionExercises: diretti });
+    }
+    // Come prima: fuori gli esercizi senza esercizio collegato e i gruppi vuoti,
+    // o buildHtml cade su ex.exercise.name.
+    sec.sectionExerciseGroups = gruppi
+      .map(({ vuoto, ...g }) => ({ ...g, sectionExercises: g.sectionExercises.filter(ex => ex && ex.exercise) }))
+      .filter(g => g.sectionExercises.length > 0);
+  }
+  const quanti = (lesson.sections || [])
+    .reduce((n, s) => n + s.sectionExerciseGroups.reduce((m, g) => m + g.sectionExercises.length, 0), 0);
+  if (quanti === 0) {
+    const e = new Error(`La lezione «${lesson.name}» è arrivata senza esercizi leggibili: `
+      + 'non si pubblica, gli schermi restano sull\'ultimo WOD.');
+    e.definitivo = true;
+    throw e;
+  }
+  return quanti;
 }
 
 // ─── Puppeteer: login + token capture ────────────────────────────────────────
@@ -2347,9 +2386,11 @@ async function main() {
 
   // Step 0: serve davvero un login? Il WOD cambia una volta al giorno: se gli
   // schermi hanno già quello di oggi, questa partenza non fa niente. E se oggi
-  // HYROX ha già rifiutato l'accesso, le partenze automatiche non riprovano fino
-  // a domani. Chi fa partire il bot a mano (Run workflow) salta tutti e due i
-  // controlli: è il modo di riprovare subito, dopo aver sistemato la password.
+  // un giro è già finito in un modo che non si sistema riprovando (HYROX ha
+  // rifiutato l'accesso, o ha risposto in un modo che il bot non capisce), le
+  // partenze automatiche non riprovano fino a domani. Chi fa partire il bot a
+  // mano (Run workflow) salta tutti e due i controlli: è il modo di riprovare
+  // subito, dopo aver sistemato la password o il codice.
   const oggi  = oggiInItalia();
   const aMano = process.env.GITHUB_EVENT_NAME === 'workflow_dispatch';
   if (!aMano && wodSugliSchermi() === oggi) {
@@ -2357,9 +2398,10 @@ async function main() {
     scriviEsito({ esito: 'saltato' });
     return;
   }
-  if (!aMano && loginRifiutatoIl() === oggi) {
-    console.log('Oggi HYROX ha già rifiutato l\'accesso: le partenze automatiche non riprovano '
-      + 'fino a domani. Per riprovare subito: Actions → Fetch WOD → Run workflow.');
+  const fermo = fermoDiOggi();
+  if (!aMano && fermo && fermo.giorno === oggi) {
+    console.log(`${fermo.motivo}\nLe partenze automatiche non riprovano fino a domani. `
+      + 'Per riprovare subito: Actions → Fetch WOD → Run workflow.');
     scriviEsito({ esito: 'saltato' });
     return;
   }
@@ -2367,26 +2409,20 @@ async function main() {
   // Step 1: Get Bearer token via Puppeteer login
   const token = await captureToken();
 
-  // Step 2: Scopri campo video su Exercise (introspection)
-  const videoField = await getExerciseVideoField(token);
+  // Step 2: i campi di video e attrezzi sono fissi (vedi VIDEO_FIELD)
+  const videoField = VIDEO_FIELD;
 
   // Step 3: Find today's lesson
   const { lessonId, isoDate } = await getTodayLessonId(token);
 
-  // Step 4: Get full lesson details (con campo video + attrezzi se disponibili)
-  const exFieldsQuery = videoField ? [videoField.query, videoField.equipmentQuery].filter(Boolean).join(' ') : '';
-  const lesson = await getLessonDetails(token, lessonId, exFieldsQuery);
-  console.log(`Lezione: "${lesson.name}" — ${lesson.sections.length} sezioni`);
+  // Step 4: la lezione intera, con video e attrezzi degli esercizi
+  const lesson = await getLessonDetails(token, lessonId);
+  lesson.sections = lesson.sections || [];
 
-  // Sanifica la lesson PRIMA di ogni build: scarta gruppi/esercizi senza
-  // esercizio collegato. Evita ex.exercise.name su null in buildHtml,
-  // buildTimerHtml e buildTimerMobileHtml.
-  for (const sec of (lesson.sections || [])) {
-    for (const g of (sec.sectionExerciseGroups || []))
-      g.sectionExercises = (g.sectionExercises || []).filter(ex => ex && ex.exercise);
-    sec.sectionExerciseGroups = (sec.sectionExerciseGroups || [])
-      .filter(g => g.sectionExercises && g.sectionExercises.length > 0);
-  }
+  // PRIMA di ogni build: esercizi al loro posto, e niente pubblicazione se la
+  // lezione non ne ha nemmeno uno (schermi vuoti al posto del WOD di ieri).
+  const esercizi = sistemaEsercizi(lesson);
+  console.log(`Lezione: "${lesson.name}" — ${lesson.sections.length} sezioni, ${esercizi} esercizi`);
 
   // Step 5: Traduci descrizione in italiano
   if (lesson.description) {
@@ -2440,7 +2476,6 @@ async function main() {
     }
   }
   console.log(`✓ pagina mobile → m/${dayToken}.html (${mobileHtml.length} bytes)`);
-  console.log('✓ debug-exercise-fields.txt scritto');
 
   // Cosa stanno mostrando gli schermi, in chiaro. Serve al giro dopo per capire
   // se un login fallito è un allarme o soltanto un tentativo andato male.
@@ -2454,7 +2489,7 @@ async function main() {
   // Un giro andato bene cancella la diagnosi vecchia e il segno del rifiuto:
   // quei file devono parlare solo del guaio ancora aperto.
   try { fs.unlinkSync(DIAGNOSI); console.log('✓ diagnostica precedente rimossa'); } catch {}
-  try { fs.unlinkSync(RIFIUTO); } catch {}
+  try { fs.unlinkSync(FERMO); } catch {}
   scriviEsito({ esito: 'pubblicato' });
 }
 
@@ -2467,10 +2502,12 @@ async function main() {
 //   avviso=si        → apre UNA segnalazione su GitHub con la diagnosi e cosa
 //                      fare, che arriva per email; se ce n'è già una aperta, no
 //   esito=pubblicato → la segnalazione aperta si chiude da sola
-// L'avviso parte subito se HYROX rifiuta l'accesso, perché lì serve una
-// persona. Per gli altri guasti solo dalle 7 del mattino: prima ci sono altre
-// partenze che possono rimediare da sole. Rosso resta solo un guasto che il bot
-// non riesce nemmeno a raccontare.
+// L'avviso parte subito se HYROX rifiuta l'accesso, o se dopo il login risponde
+// in un modo che riprovando non cambia (dal 15/09/2026, vedi «definitivo»):
+// lì serve una persona, e le partenze automatiche si fermano fino a domani.
+// Per gli altri guasti solo dalle 7 del mattino: prima ci sono altre partenze
+// che possono rimediare da sole. Rosso resta solo un guasto che il bot non
+// riesce nemmeno a raccontare.
 
 const ORA_AVVISO = 7;
 
@@ -2481,18 +2518,21 @@ function scriviEsito(valori) {
   fs.appendFileSync(file, Object.entries(valori).map(([k, v]) => `${k}=${v}\n`).join(''));
 }
 
-// Il giorno (AAAA-MM-GG, in Italia) in cui HYROX ha rifiutato l'accesso.
-function loginRifiutatoIl() {
-  try { return fs.readFileSync(RIFIUTO, 'utf8').slice(0, 10); } catch { return null; }
+// Il giorno (AAAA-MM-GG, in Italia) in cui le partenze automatiche si sono
+// fermate, e il perché. Prima riga il giorno, seconda il motivo.
+function fermoDiOggi() {
+  try {
+    const [giorno, motivo] = fs.readFileSync(FERMO, 'utf8').split('\n');
+    return { giorno: giorno.slice(0, 10), motivo: motivo || '' };
+  } catch { return null; }
 }
 
-function segnaLoginRifiutato(giorno) {
+function segnaFermo(giorno, motivo) {
   try {
     if (!fs.existsSync(DIAG_DIR)) fs.mkdirSync(DIAG_DIR, { recursive: true });
-    fs.writeFileSync(RIFIUTO, `${giorno}\nQuel giorno HYROX ha rifiutato l'accesso: `
-      + 'le partenze automatiche non riprovano fino al giorno dopo.\n', 'utf8');
+    fs.writeFileSync(FERMO, `${giorno}\n${motivo.replace(/\s+/g, ' ').trim()}\n`, 'utf8');
   } catch (e) {
-    console.log('Segno del rifiuto non scritto:', e.message);
+    console.log('Segno del fermo non scritto:', e.message);
   }
 }
 
@@ -2538,9 +2578,16 @@ main().catch(err => {
   const pubblicato = wodSugliSchermi();
   const aggiornato = pubblicato === oggi;
   const rifiutato  = err.rifiutato === true;
-  const avviso     = !aggiornato && (rifiutato || oraInItalia() >= ORA_AVVISO);
+  // Definitivo = riprovando fra un'ora andrebbe allo stesso modo, con un login
+  // in più sull'account che usano anche i coach. Il 15/09/2026 alle 16 sarebbero
+  // stati sei login in una notte, tutti fermati sulla stessa domanda sbagliata.
+  const definitivo = rifiutato || err.definitivo === true;
+  const avviso     = !aggiornato && (definitivo || oraInItalia() >= ORA_AVVISO);
 
-  if (rifiutato) segnaLoginRifiutato(oggi);
+  if (definitivo) {
+    segnaFermo(oggi, rifiutato ? 'Oggi HYROX ha rifiutato l\'accesso.'
+      : `Oggi il bot è entrato in HYROX ma si è fermato: ${err.message}`);
+  }
 
   const cosaFare = rifiutato ? [
     'Cosa fare:',
@@ -2549,6 +2596,17 @@ main().catch(err => {
     '   (Settings → Secrets and variables → Actions).',
     '3. Far ripartire il bot a mano: Actions → Fetch WOD → Run workflow.',
     '   Da solo oggi non riprova, per non far bloccare l\'account.',
+  ] : err.senzaWod ? [
+    'Cosa fare:',
+    '1. Guardare su https://performancehub.hyrox365.com se HYROX ha messo le',
+    '   lezioni di questi giorni.',
+    '2. Quando ci sono, far ripartire il bot a mano: Actions → Fetch WOD → Run workflow.',
+    '   Da solo oggi non riprova, per non fare altri accessi con l\'account dei coach.',
+  ] : definitivo ? [
+    'Cosa fare: va corretto il bot (fetch-wod.js). HYROX ha risposto in un modo che',
+    'il bot non capisce, e riprovare non cambierebbe niente: oggi le partenze',
+    'automatiche non riprovano, per non fare altri accessi con l\'account dei coach.',
+    'Dopo la correzione: Actions → Fetch WOD → Run workflow.',
   ] : [
     'Cosa fare: per ora niente. Il bot riprova alla prossima partenza, al più',
     'tardi la notte prossima. Se la segnalazione è ancora aperta domani, va letto',
