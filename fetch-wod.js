@@ -12,7 +12,14 @@ const fs        = require('fs');
 const path      = require('path');
 const crypto    = require('crypto');
 
-const GRAPHQL   = 'https://api.prod.hyrox.fiit-tech.net/graphql';
+// L'indirizzo dei dati lo decide il sito di HYROX: il bot usa quello delle
+// richieste da cui prende il token (vedi raccoltaToken), e questo è solo il
+// ripiego. Fino al 15/09/2026 era api.prod.hyrox.fiit-tech.net/graphql. Il
+// Performance Hub ricompilato l'11/09 chiede i dati a OneFIIT
+// (REACT_APP_HYROX_API_URL nella sua configurazione pubblica), e il vecchio
+// indirizzo, rimasto come copia, rispondeva 401 al token nuovo dopo ogni login.
+const GRAPHQL   = 'https://onefiit-api.platform.onefiit.com/graphql';
+let graphqlUrl  = GRAPHQL; // lo aggiorna captureTokenOnce
 const PORTAL    = 'https://portal.hyrox365.com/login';
 const HUB       = 'https://performancehub.hyrox365.com';
 const EMAIL     = process.env.HYROX_EMAIL;
@@ -1808,12 +1815,27 @@ async function translateToItalian(text) {
 // ─── GraphQL helpers ──────────────────────────────────────────────────────────
 
 async function gql(token, query, variables = {}) {
-  const r = await fetch(GRAPHQL, {
+  const r = await fetch(graphqlUrl, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+      // Lo manda anche il sito: il «giorno» delle lezioni può deciderlo il server.
+      'x-timezone': 'Europe/Rome',
+    },
     body: JSON.stringify({ query, variables })
   });
-  if (!r.ok) throw new Error(`GraphQL HTTP ${r.status}`);
+  if (!r.ok) {
+    // Il corpo della risposta dice il perché, e finisce nella diagnosi che sta
+    // nel repo: si accorcia e si tolgono i token, se mai la risposta ne ripete uno.
+    let perche = '';
+    try {
+      perche = (await r.text()).replace(/eyJ[\w-]+\.[\w-]+\.[\w-]*/g, '[token]')
+        .replace(/\s+/g, ' ').trim().slice(0, 200);
+    } catch {}
+    throw new Error(`GraphQL HTTP ${r.status} da ${new URL(graphqlUrl).host}`
+      + (perche ? ` — ${perche}` : ''));
+  }
   const json = await r.json();
   if (json.errors) throw new Error(`GraphQL error: ${json.errors[0].message}`);
   return json.data;
@@ -2000,6 +2022,34 @@ async function dumpLoginDebug(page, motivo) {
   console.log('--- fine DEBUG LOGIN ---');
 }
 
+// Il token si prende SOLO dalle richieste GraphQL che il sito fa da solo, e
+// insieme al token si tiene l'indirizzo a cui il sito le manda: poi il bot chiede
+// i dati allo stesso indirizzo con lo stesso token. Fino al 15/09/2026 si
+// prendeva il «Bearer» di qualsiasi richiesta e lo si mandava sempre a GRAPHQL,
+// e quando HYROX ha spostato i dati su OneFIIT ogni login riuscito finiva in un
+// 401. Degli altri token si tiene l'ultimo visto su HYROX, solo come ripiego, e
+// di tutte le richieste con token si annota l'indirizzo (mai il token).
+function raccoltaToken() {
+  const visti = new Set();
+  let graphql = null; // { token, url }
+  let altro   = null; // { token, url }
+  return {
+    leggi(url, auth) {
+      if (!auth || !auth.startsWith('Bearer ')) return;
+      let u;
+      try { u = new URL(url); } catch { return; }
+      const dove = u.origin + u.pathname;
+      visti.add(dove);
+      const preso = { token: auth.slice(7), url: dove };
+      if (u.pathname.endsWith('/graphql')) graphql = preso;
+      else if (/(^|\.)(onefiit\.com|fiit-tech\.net|hyrox365\.com)$/.test(u.hostname)) altro = preso;
+    },
+    graphql: () => graphql,
+    altro:   () => altro,
+    visti:   () => [...visti],
+  };
+}
+
 async function captureTokenOnce() {
   console.log('Avvio Puppeteer...');
   const browser = await puppeteer.launch({
@@ -2037,11 +2087,8 @@ async function captureTokenOnce() {
     // di login. È esattamente quello che si vedeva: nessuna navigazione dopo il
     // submit, e la stessa identica foto (934.179 byte) nei tre run falliti del 4 e
     // 5 settembre.
-    let capturedToken = null;
-    page.on('request', req => {
-      const auth = req.headers()['authorization'];
-      if (auth && auth.startsWith('Bearer ')) capturedToken = auth.slice(7);
-    });
+    const raccolta = raccoltaToken();
+    page.on('request', req => raccolta.leggi(req.url(), req.headers()['authorization']));
 
     // IMPORTANTE: includi redirect_to già nel login iniziale.
     // Se navigassimo prima senza redirect_to e poi tornassimo con redirect_to
@@ -2094,16 +2141,30 @@ async function captureTokenOnce() {
 
     // Aspetta token (intercettato a livello di rete, max 20s)
     const deadline = Date.now() + 20000;
-    while (!capturedToken && Date.now() < deadline) {
+    while (!raccolta.graphql() && Date.now() < deadline) {
       await new Promise(r => setTimeout(r, 200));
     }
 
-    if (!capturedToken) {
-      throw new Error('Token non catturato entro 20s: nessuna richiesta GraphQL autenticata su /workouts');
+    const visti = raccolta.visti().join(', ') || '(nessuna)';
+    console.log('Richieste con token:', visti);
+    let preso = raccolta.graphql();
+    if (!preso && raccolta.altro()) {
+      // Nessuna richiesta GraphQL con token, ma HYROX un token l'ha dato: si
+      // prova quello con l'indirizzo di ripiego, invece di buttare il login.
+      console.log(`Nessuna richiesta GraphQL con token: provo quello di un'altra richiesta di HYROX con ${GRAPHQL}.`);
+      preso = { token: raccolta.altro().token, url: GRAPHQL };
+    }
+    if (!preso) {
+      throw new Error('Token non catturato entro 20s: nessuna richiesta GraphQL autenticata su /workouts. '
+        + `Richieste con token: ${visti}`);
     }
 
-    console.log('Token catturato.');
-    return capturedToken;
+    graphqlUrl = preso.url;
+    // Se dopo il login qualcosa va storto, la diagnosi nel repo dice da dove
+    // arrivava il token e a chi si chiedevano i dati (i token mai).
+    ultimaDiagnosiLogin = `Login riuscito. Dati chiesti a: ${graphqlUrl}\nRichieste con token: ${visti}`;
+    console.log(`Token catturato, dati da ${graphqlUrl}.`);
+    return preso.token;
   } catch (e) {
     if (page) await dumpLoginDebug(page, e.message);
     throw e;
