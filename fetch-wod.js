@@ -1,7 +1,7 @@
 'use strict';
 // ─────────────────────────────────────────────────────────────────────────────
 // fetch-wod.js — HYROX WOD daily automation
-// Runs via GitHub Actions every day at 04:50 Italy time (02:50 UTC)
+// Runs via GitHub Actions at night: one login a day (orari in fetch-wod.yml)
 // 1. Puppeteer logs into portal.hyrox365.com and captures the Bearer token
 // 2. Queries the Hyrox GraphQL API for today's scheduled lesson
 // 3. Generates index.html for the TV display
@@ -21,6 +21,7 @@ const OUT       = path.join(__dirname, 'index.html');
 const STATO     = path.join(__dirname, 'stato-wod.json');   // che WOD sta sugli schermi
 const DIAG_DIR  = path.join(__dirname, 'diagnostica');
 const DIAGNOSI  = path.join(DIAG_DIR, 'ultimo-errore.txt'); // l'ultimo giro andato male
+const RIFIUTO   = path.join(DIAG_DIR, 'login-rifiutato.txt'); // il giorno in cui HYROX ha rifiutato l'accesso
 const TIMER_OUT = path.join(__dirname, 'timer.html');
 const VIDEO_DIR = path.join(__dirname, 'videos');
 
@@ -2047,51 +2048,44 @@ async function captureTokenOnce() {
     // da utente già autenticato, il portale ignora il parametro e NON completa l'SSO.
     const loginUrl = `${PORTAL}?redirect_to=${encodeURIComponent(HUB + '/portal-authorization')}`;
     console.log('Apertura login (con redirect_to hub)...');
-    await page.goto(loginUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await page.waitForSelector('input[placeholder="Email"]', { timeout: 15000 });
+    await page.goto(loginUrl, { waitUntil: 'load', timeout: 30000 });
+    await page.waitForSelector(CAMPO_EMAIL, { timeout: 15000 });
+    await page.waitForSelector(CAMPO_PASSWORD, { timeout: 15000 });
 
-    await page.click('input[placeholder="Email"]');
-    await page.type('input[placeholder="Email"]', EMAIL, { delay: 60 });
-    await page.click('input[placeholder="Password"]');
-    await page.type('input[placeholder="Password"]', PASSWORD, { delay: 60 });
-
-    // Funzione di check: siamo sull'hub e fuori da portal-authorization?
-    const onHub = () =>
-      window.location.origin === 'https://performancehub.hyrox365.com' &&
-      !window.location.pathname.includes('/portal-authorization');
-
-    // Prima il bottone di invio, l'Invio come ripiego: se un giorno il portale
-    // smette di reagire all'Invio dato dentro il campo password, il login
-    // continua a funzionare. Il log dice sempre quale delle due strade ha preso.
-    let inviato = false;
-    try {
-      const handle = await page.evaluateHandle(() => {
-        const etichetta = /^(log ?in|sign ?in|accedi|entra|continua)$/i;
-        return document.querySelector('button[type="submit"], input[type="submit"]')
-            || [...document.querySelectorAll('button')].find(b => etichetta.test((b.textContent || '').trim()))
-            || null;
-      });
-      const bottone = handle.asElement();
-      if (bottone) {
-        console.log('Submit login (clic sul bottone)...');
-        await bottone.click();
-        inviato = true;
-      }
-    } catch (e) {
-      console.log('Bottone di invio non cliccabile (' + e.message + '), uso l\'Invio.');
+    // Fino al 15/09/2026 email e password si battevano una lettera alla volta
+    // appena il campo compariva, con la pagina (portale nuovo da fine agosto)
+    // ancora in caricamento e l'avviso dei cookie che si apre e si prende il
+    // cursore. HYROX rispondeva quasi sempre «User not found or password wrong!»,
+    // benché la password salvata sia giusta: con quella il bot è entrato il
+    // 12/09 e il 15/09. Adesso si aspetta la pagina carica, i due valori si
+    // scrivono in un colpo solo, si rileggono, e il modulo parte senza clic.
+    // Se HYROX rifiuta lo stesso, con i campi ricontrollati, la causa non è il
+    // bot: l'errore lo dice (e.rifiutato) e la partenza non riprova.
+    await new Promise(r => setTimeout(r, 1500));
+    if (!(await compilaLogin(page))) {
+      throw new Error('Email e password non restavano nei campi: il modulo non è stato inviato');
     }
-    if (!inviato) {
-      console.log('Submit login (Invio)...');
-      await page.keyboard.press('Enter');
-    }
+    console.log('Email e password nei campi, ricontrollate prima dell\'invio.');
+    await inviaLogin(page);
     console.log('URL dopo submit:', page.url());
 
-    // Non si aspetta più una navigazione: il portale è una SPA e può portarci
-    // sull'hub senza ricaricare la pagina, e in quel caso waitForNavigation resta
-    // in attesa fino al timeout anche se il login è riuscito. Si aspetta invece
-    // il risultato — essere sull'hub — che vale sia col ricaricamento sia senza.
+    // Non si aspetta una navigazione: il portale può portarci sull'hub senza
+    // ricaricare la pagina. Si aspetta il RISULTATO — essere sull'hub, oppure il
+    // rifiuto scritto sulla pagina — così un rifiuto si riconosce in pochi
+    // secondi invece che dopo un minuto di attesa.
     console.log('Aspettando SSO su performancehub...');
-    await page.waitForFunction(onHub, { timeout: 60000, polling: 500 });
+    const attesa = await page.waitForFunction(() => {
+      if (window.location.origin === 'https://performancehub.hyrox365.com' &&
+          !window.location.pathname.includes('/portal-authorization')) return 'hub';
+      const testo = document.body ? document.body.innerText : '';
+      return /user not found|password wrong/i.test(testo) ? 'rifiutato' : false;
+    }, { timeout: 60000, polling: 500 });
+    if ((await attesa.jsonValue()) === 'rifiutato') {
+      const e = new Error('HYROX ha rifiutato l\'accesso («User not found or password wrong!») '
+        + 'con email e password ricontrollate nei campi');
+      e.rifiutato = true;
+      throw e;
+    }
     console.log('Su performancehub:', page.url());
 
     // Naviga a /workouts per triggerare le chiamate GraphQL autenticate
@@ -2118,24 +2112,81 @@ async function captureTokenOnce() {
   }
 }
 
-// Dal 31/08/2026 il portale HYROX ogni tanto non risponde al login, e il giro
-// successivo passa senza che sia cambiato niente: si riprova due volte, con
-// attese crescenti, prima di dichiarare l'errore. Ogni tentativo riparte da un
-// browser nuovo, quindi non si porta dietro lo stato di quello che si è piantato.
+// Un tentativo solo per partenza (decisione di Giuliano del 15/09/2026). Dal
+// 06/09 erano tre, con attese: con HYROX che rifiutava l'accesso facevano fino a
+// 21 login falliti al giorno, su un account che usano anche i coach di Mosciano.
+// Se questo tentativo non va riprova la partenza dopo, tranne quando HYROX ha
+// rifiutato l'accesso: allora si aspetta il giorno dopo (vedi in fondo al file).
 async function captureToken() {
-  const ATTESE = [15000, 45000]; // fra un tentativo e l'altro
-  const TENTATIVI = ATTESE.length + 1;
-  for (let n = 1; n <= TENTATIVI; n++) {
-    try {
-      return await captureTokenOnce();
-    } catch (e) {
-      if (n === TENTATIVI) throw e;
-      const attesa = ATTESE[n - 1];
-      console.log(`Login fallito al tentativo ${n} di ${TENTATIVI}: ${e.message}`);
-      console.log(`Riprovo fra ${attesa / 1000} secondi...`);
-      await new Promise(r => setTimeout(r, attesa));
-    }
+  return captureTokenOnce();
+}
+
+const CAMPO_EMAIL    = 'input[placeholder="Email"]';
+const CAMPO_PASSWORD = 'input[placeholder="Password"]';
+
+// Scrive email e password in un colpo solo e li rilegge mezzo secondo dopo:
+// conta quello che c'è nei campi al momento dell'invio. Due prove, perché la
+// pagina può ancora rifare i campi mentre finisce di caricarsi. A capo e ritorni
+// si tolgono prima: il browser li toglie comunque da un campo di una riga, e il
+// confronto non deve fallire per quello. I valori non finiscono mai nel log.
+async function compilaLogin(page) {
+  const pulisci = s => String(s).replace(/[\r\n]/g, '');
+  const valori  = [CAMPO_EMAIL, CAMPO_PASSWORD, pulisci(EMAIL), pulisci(PASSWORD)];
+  for (let prova = 1; prova <= 2; prova++) {
+    await page.evaluate((selEmail, selPassword, email, password) => {
+      for (const [sel, valore] of [[selEmail, email], [selPassword, password]]) {
+        const campo = document.querySelector(sel);
+        if (!campo) continue;
+        campo.focus();
+        campo.value = valore;
+        campo.dispatchEvent(new Event('input', { bubbles: true }));
+        campo.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    }, ...valori);
+    await new Promise(r => setTimeout(r, 500));
+    const giusti = await page.evaluate((selEmail, selPassword, email, password) => {
+      const e = document.querySelector(selEmail);
+      const p = document.querySelector(selPassword);
+      return !!e && !!p && e.value === email && p.value === password;
+    }, ...valori);
+    if (giusti) return true;
+    console.log(`Email e password non giuste nei campi (prova ${prova} di 2).`);
+    await new Promise(r => setTimeout(r, 1500));
   }
+  return false;
+}
+
+// Invia il modulo senza cliccare: un clic cade su quello che sta sopra il
+// bottone, per esempio l'avviso dei cookie; requestSubmit no. L'Invio resta come
+// ripiego, se un giorno la pagina non avesse più un modulo.
+async function inviaLogin(page) {
+  let come = null;
+  try {
+    come = await page.evaluate((selPassword) => {
+      const campo  = document.querySelector(selPassword);
+      const modulo = campo && campo.form;
+      if (!modulo) return null;
+      const bottone = modulo.querySelector('button[type="submit"], input[type="submit"]');
+      if (typeof modulo.requestSubmit === 'function') {
+        modulo.requestSubmit(bottone || undefined);
+        return 'modulo';
+      }
+      if (bottone) { bottone.click(); return 'bottone'; }
+      return null;
+    }, CAMPO_PASSWORD);
+  } catch (e) {
+    // L'invio cambia pagina: se succede prima che evaluate risponda, il modulo
+    // è partito lo stesso.
+    if (!/context was destroyed|navigat/i.test(e.message)) throw e;
+    come = 'modulo';
+  }
+  if (come) {
+    console.log(`Submit login (${come})...`);
+    return;
+  }
+  console.log('Submit login (Invio)...');
+  await page.focus(CAMPO_PASSWORD);
+  await page.keyboard.press('Enter');
 }
 
 // ─── Self-host dei video esercizio (elimina la scadenza degli URL firmati) ────
@@ -2233,6 +2284,25 @@ async function main() {
     process.exit(1);
   }
 
+  // Step 0: serve davvero un login? Il WOD cambia una volta al giorno: se gli
+  // schermi hanno già quello di oggi, questa partenza non fa niente. E se oggi
+  // HYROX ha già rifiutato l'accesso, le partenze automatiche non riprovano fino
+  // a domani. Chi fa partire il bot a mano (Run workflow) salta tutti e due i
+  // controlli: è il modo di riprovare subito, dopo aver sistemato la password.
+  const oggi  = oggiInItalia();
+  const aMano = process.env.GITHUB_EVENT_NAME === 'workflow_dispatch';
+  if (!aMano && wodSugliSchermi() === oggi) {
+    console.log(`Gli schermi mostrano già il WOD di oggi (${oggi}): nessun login.`);
+    scriviEsito({ esito: 'saltato' });
+    return;
+  }
+  if (!aMano && loginRifiutatoIl() === oggi) {
+    console.log('Oggi HYROX ha già rifiutato l\'accesso: le partenze automatiche non riprovano '
+      + 'fino a domani. Per riprovare subito: Actions → Fetch WOD → Run workflow.');
+    scriviEsito({ esito: 'saltato' });
+    return;
+  }
+
   // Step 1: Get Bearer token via Puppeteer login
   const token = await captureToken();
 
@@ -2320,26 +2390,50 @@ async function main() {
   }, null, 2) + '\n', 'utf8');
   console.log(`✓ stato-wod.json → WOD di ${isoDate}`);
 
-  // Un giro andato bene cancella la diagnosi vecchia: quel file deve parlare
-  // solo dell'ultimo guaio ancora aperto, altrimenti si legge un allarme finito.
+  // Un giro andato bene cancella la diagnosi vecchia e il segno del rifiuto:
+  // quei file devono parlare solo del guaio ancora aperto.
   try { fs.unlinkSync(DIAGNOSI); console.log('✓ diagnostica precedente rimossa'); } catch {}
+  try { fs.unlinkSync(RIFIUTO); } catch {}
+  scriviEsito({ esito: 'pubblicato' });
 }
 
-// ─── Quando è un allarme e quando no ────────────────────────────────────────
-// Dal 31/08/2026 il portale HYROX rifiuta il login a giri alterni: nei 50 giri
-// dal 31/08 al 05/09 ne sono falliti 16 su 50, sparsi a caso nella giornata, e
-// il giro dopo passa quasi sempre. Con il workflow rosso a ogni tentativo
-// mancato, l'email di GitHub arriva una volta su tre e non chiede mai niente a
-// nessuno: dopo una settimana non la si legge più, e il giorno in cui il WOD
-// manca davvero passa liscia insieme alle altre.
-//
-// Quindi il giro è rosso quando il RISULTATO è sbagliato, non quando un
-// tentativo è andato male: rosso solo se gli schermi di Mosciano non stanno
-// mostrando il WOD di oggi. E non prima delle 9 del mattino, perché fino a lì
-// restano i giri di recupero (05:17, 06:47, 09:17 ora italiana).
-//
-// Un tentativo mancato non sparisce comunque: finisce in diagnostica/, che si
-// legge senza entrare in GitHub.
+// ─── Quando è un avviso e quando no ─────────────────────────────────────────
+// Fino al 15/09/2026 l'allarme era il workflow rosso: un'email di GitHub per
+// ogni giro fallito, senza il motivo, e la diagnosi non si salvava proprio nei
+// giri rossi, cioè quando serviva. Dal 15/09 un giro andato male resta verde e
+// lascia al workflow (fetch-wod.yml) due righe:
+//   esito=fallito    → il workflow salva diagnostica/ anche se il giro è fallito
+//   avviso=si        → apre UNA segnalazione su GitHub con la diagnosi e cosa
+//                      fare, che arriva per email; se ce n'è già una aperta, no
+//   esito=pubblicato → la segnalazione aperta si chiude da sola
+// L'avviso parte subito se HYROX rifiuta l'accesso, perché lì serve una
+// persona. Per gli altri guasti solo dalle 7 del mattino: prima ci sono altre
+// partenze che possono rimediare da sole. Rosso resta solo un guasto che il bot
+// non riesce nemmeno a raccontare.
+
+const ORA_AVVISO = 7;
+
+// Le righe per il workflow: GITHUB_OUTPUT esiste solo dentro GitHub Actions.
+function scriviEsito(valori) {
+  const file = process.env.GITHUB_OUTPUT;
+  if (!file) return;
+  fs.appendFileSync(file, Object.entries(valori).map(([k, v]) => `${k}=${v}\n`).join(''));
+}
+
+// Il giorno (AAAA-MM-GG, in Italia) in cui HYROX ha rifiutato l'accesso.
+function loginRifiutatoIl() {
+  try { return fs.readFileSync(RIFIUTO, 'utf8').slice(0, 10); } catch { return null; }
+}
+
+function segnaLoginRifiutato(giorno) {
+  try {
+    if (!fs.existsSync(DIAG_DIR)) fs.mkdirSync(DIAG_DIR, { recursive: true });
+    fs.writeFileSync(RIFIUTO, `${giorno}\nQuel giorno HYROX ha rifiutato l'accesso: `
+      + 'le partenze automatiche non riprovano fino al giorno dopo.\n', 'utf8');
+  } catch (e) {
+    console.log('Segno del rifiuto non scritto:', e.message);
+  }
+}
 
 function oggiInItalia() {
   return new Intl.DateTimeFormat('sv', { timeZone: 'Europe/Rome' }).format(new Date());
@@ -2382,8 +2476,23 @@ main().catch(err => {
   const oggi       = oggiInItalia();
   const pubblicato = wodSugliSchermi();
   const aggiornato = pubblicato === oggi;
-  const presto     = oraInItalia() < 9;
-  const allarme    = !aggiornato && !presto;
+  const rifiutato  = err.rifiutato === true;
+  const avviso     = !aggiornato && (rifiutato || oraInItalia() >= ORA_AVVISO);
+
+  if (rifiutato) segnaLoginRifiutato(oggi);
+
+  const cosaFare = rifiutato ? [
+    'Cosa fare:',
+    '1. Entrare da un browser su https://portal.hyrox365.com con l\'account del bot.',
+    '2. Se la password non entra più, cambiarla nel segreto HYROX_PASSWORD',
+    '   (Settings → Secrets and variables → Actions).',
+    '3. Far ripartire il bot a mano: Actions → Fetch WOD → Run workflow.',
+    '   Da solo oggi non riprova, per non far bloccare l\'account.',
+  ] : [
+    'Cosa fare: per ora niente. Il bot riprova alla prossima partenza, al più',
+    'tardi la notte prossima. Se la segnalazione è ancora aperta domani, va letto',
+    'il registro del giro in Actions.',
+  ];
 
   scriviDiagnosi([
     'Scritto dal workflow "Fetch WOD". Non si corregge a mano: lo riscrive il',
@@ -2392,24 +2501,15 @@ main().catch(err => {
     `Quando:      ${new Date().toISOString()} (${oggi} in Italia, ore ${oraInItalia()})`,
     `Errore:      ${err.message}`,
     `Sugli schermi c'è il WOD del: ${pubblicato || '(non si sa)'}`,
-    `Esito:       ${allarme ? 'ALLARME — il giro è rosso e parte l\'email'
-                            : 'tentativo mancato — il giro resta verde'}`,
+    `Avviso:      ${avviso ? 'sì, si apre una segnalazione su GitHub' : 'no'}`,
+    '',
+    ...cosaFare,
     '',
     ultimaDiagnosiLogin || '(il login non è arrivato a raccogliere niente: '
       + 'l\'errore sta prima o dopo la pagina di accesso)',
     '',
   ].join('\n'));
 
-  if (aggiornato) {
-    console.log(`Gli schermi mostrano già il WOD di oggi (${oggi}): tentativo mancato, non un allarme.`);
-    process.exit(0);
-  }
-  if (presto) {
-    console.log(`Sugli schermi c'è il WOD del ${pubblicato || '(non si sa)'} e non sono ancora le 9: `
-      + 'restano i giri di recupero, non è ancora un allarme.');
-    process.exit(0);
-  }
-  console.error(`Gli schermi di Mosciano sono fermi al WOD del ${pubblicato || '(non si sa)'} `
-    + `e oggi è ${oggi}: questo sì che va guardato.`);
-  process.exit(1);
+  scriviEsito({ esito: 'fallito', avviso: avviso ? 'si' : 'no' });
+  process.exit(0);
 });
