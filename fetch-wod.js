@@ -169,11 +169,18 @@ function getSectionFormat(s) {
 
 // ─── HTML generation ─────────────────────────────────────────────────────────
 
+// Le TV di Mosciano tagliano i bordi dell'immagine (overscan, circa il 2-2,5% per lato):
+// il quadro 1920×1080 si rimpicciolisce al centro e intorno resta una cornice nera.
+// Vale per gli schermi (index.html) e per il timer (timer.html), non per il telefono.
+const SCALA_TV = 0.92;
+const CSS_CORNICE_TV = `.screen{-webkit-transform:scale(${SCALA_TV});transform:scale(${SCALA_TV});-webkit-transform-origin:50% 50%;transform-origin:50% 50%}`;
+
 const CSS = `
 :root{--bg:#000;--bg2:#0d0d0d;--bg3:#1a1a1a;--white:#fff;--yellow:#FFE500;--yellow2:rgba(255,229,0,.16);--yellow3:rgba(255,229,0,.35);--dim:rgba(255,255,255,.78);--line:rgba(255,255,255,.10);--linehi:rgba(255,255,255,.18)}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{width:1920px;height:1080px;overflow:hidden;background:var(--bg);color:#fff;font-family:'Barlow',sans-serif}
 .screen{width:1920px;height:1080px;display:grid;grid-template-columns:520px 1fr;overflow:hidden}
+${CSS_CORNICE_TV}
 .left{background:var(--bg2);border-right:2px solid var(--linehi);display:flex;flex-direction:column;padding:0;flex-shrink:0}
 .left-top-bar{width:100%;height:6px;background:var(--yellow)}
 .logo-block{background:#000;border-bottom:1px solid var(--linehi);padding:26px 36px 22px;display:flex;flex-direction:column;gap:0}
@@ -652,6 +659,7 @@ function buildTimerHtml(lesson, isoDate, videoField, qrDataUrl) {
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{width:1920px;height:1080px;overflow:hidden;background:#000;color:#fff;font-family:'Barlow Condensed',sans-serif}
 .screen{width:1920px;height:1080px;display:-webkit-flex;display:flex;-webkit-flex-direction:row;flex-direction:row;overflow:hidden}
+${CSS_CORNICE_TV}
 
 /* ── LEFT 520px ── */
 .left{width:520px;min-width:520px;background:#0d0d0d;border-right:2px solid rgba(255,255,255,.18);display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;height:1080px}
