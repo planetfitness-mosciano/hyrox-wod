@@ -1,2 +1,2 @@
-2026-10-06
+2026-10-07
 Oggi il bot è entrato in HYROX ma si è fermato: GraphQL HTTP 401 da onefiit-api.platform.onefiit.com — {"error":"invalid_request","message":"Invalid token: access token is invalid"}
