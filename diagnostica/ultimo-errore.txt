@@ -1,7 +1,7 @@
 Scritto dal workflow "Fetch WOD". Non si corregge a mano: lo riscrive il
 prossimo giro fallito, e un giro riuscito lo cancella.
 
-Quando:      2026-10-09T06:15:21.628Z (2026-10-09 in Italia, ore 8)
+Quando:      2026-10-10T05:58:15.647Z (2026-10-10 in Italia, ore 7)
 Errore:      GraphQL HTTP 401 da onefiit-api.platform.onefiit.com — {"error":"invalid_request","message":"Invalid token: access token is invalid"}
 Sugli schermi c'è il WOD del: 2026-10-05
 Avviso:      sì, si apre una segnalazione su GitHub
