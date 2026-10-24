@@ -1,15 +1,14 @@
 Scritto dal workflow "Fetch WOD". Non si corregge a mano: lo riscrive il
 prossimo giro fallito, e un giro riuscito lo cancella.
 
-Quando:      2026-10-23T04:57:50.567Z (2026-10-23 in Italia, ore 6)
-Errore:      GraphQL HTTP 401 da onefiit-api.platform.onefiit.com — {"error":"invalid_request","message":"Invalid token: access token is invalid"}
+Quando:      2026-10-24T04:42:52.046Z (2026-10-24 in Italia, ore 6)
+Errore:      Token non catturato entro 20s: nessuna richiesta GraphQL autenticata su /workouts. Richieste con token: (nessuna)
 Sugli schermi c'è il WOD del: 2026-10-05
-Avviso:      sì, si apre una segnalazione su GitHub
+Avviso:      no
 
-Cosa fare: va corretto il bot (fetch-wod.js). HYROX ha risposto in un modo che
-il bot non capisce, e riprovare non cambierebbe niente: oggi le partenze
-automatiche non riprovano, per non fare altri accessi con l'account dei coach.
-Dopo la correzione: Actions → Fetch WOD → Run workflow.
+Cosa fare: per ora niente. Il bot riprova alla prossima partenza, al più
+tardi la notte prossima. Se la segnalazione è ancora aperta domani, va letto
+il registro del giro in Actions.
 
-Login riuscito. Dati chiesti a: https://onefiit-api.platform.onefiit.com/graphql
-Richieste con token: https://recordrelay.tooling.fiit-tech.net/api/v1/emit
+URL finale: https://performancehub.hyrox365.com/workouts
+Testo visibile: IT Giuliano Appicciutoli IMPARA Come condurre gli allenamenti Come usare l'Hub ALLENATI Il mio allenamento Libreria Sfide Workout Builder Schermi Test di fitness CRESCI Materiali per l'evento Attivazioni dell'evento Promuovi il tuo spazio Assistenza Home Allenamenti Allenamenti Settimana 122 19/10-25/10 2026 Foundational #245 RPE 1 50 MINS Foundational #245 Attrezzatura +3 Power #246 RPE 7 53 MINS Power #246 Attrezzatura +1 Engine #245 RPE 1 54 MINS Engine #245 Attrezzatura +1 Engine #246 RPE 1 53 MINS Engine #246 Attrezzatura Power #245 RPE 8 53 MINS Power #245 Attrezzatura Complete #246 RPE 8 52 MINS Complete #246 Attrezzatura Complete #245 RPE 1 50 MINS Complete #245 Attrezzatura Foundational #246 RPE 1 50 MINS Foundational #246 Attrezzatura +2 Settimana 121 12/10-18/10 2026 Foundationa
