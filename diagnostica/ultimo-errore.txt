@@ -1,10 +1,10 @@
 Scritto dal workflow "Fetch WOD". Non si corregge a mano: lo riscrive il
 prossimo giro fallito, e un giro riuscito lo cancella.
 
-Quando:      2026-10-24T12:00:44.546Z (2026-10-24 in Italia, ore 14)
+Quando:      2026-10-25T04:48:24.587Z (2026-10-25 in Italia, ore 5)
 Errore:      Token non catturato entro 20s: nessuna richiesta GraphQL autenticata su /workouts. Richieste con token: (nessuna)
 Sugli schermi c'è il WOD del: 2026-10-05
-Avviso:      sì, si apre una segnalazione su GitHub
+Avviso:      no
 
 Cosa fare: per ora niente. Il bot riprova alla prossima partenza, al più
 tardi la notte prossima. Se la segnalazione è ancora aperta domani, va letto
