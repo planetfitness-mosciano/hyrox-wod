@@ -1,14 +1,14 @@
 Scritto dal workflow "Fetch WOD". Non si corregge a mano: lo riscrive il
 prossimo giro fallito, e un giro riuscito lo cancella.
 
-Quando:      2026-10-25T12:35:00.813Z (2026-10-25 in Italia, ore 13)
+Quando:      2026-10-26T04:53:46.601Z (2026-10-26 in Italia, ore 5)
 Errore:      Token non catturato entro 20s: nessuna richiesta GraphQL autenticata su /workouts. Richieste con token: (nessuna)
 Sugli schermi c'è il WOD del: 2026-10-05
-Avviso:      sì, si apre una segnalazione su GitHub
+Avviso:      no
 
 Cosa fare: per ora niente. Il bot riprova alla prossima partenza, al più
 tardi la notte prossima. Se la segnalazione è ancora aperta domani, va letto
 il registro del giro in Actions.
 
 URL finale: https://performancehub.hyrox365.com/workouts
-Testo visibile: IT Giuliano Appicciutoli IMPARA Come condurre gli allenamenti Come usare l'Hub ALLENATI Il mio allenamento Libreria Sfide Workout Builder Schermi Test di fitness CRESCI Materiali per l'evento Attivazioni dell'evento Promuovi il tuo spazio Assistenza Home Allenamenti Allenamenti Settimana 122 19/10-25/10 2026 Foundational #245 RPE 1 50 MINS Foundational #245 Attrezzatura +3 Power #246 RPE 7 53 MINS Power #246 Attrezzatura +1 Engine #245 RPE 1 54 MINS Engine #245 Attrezzatura +1 Engine #246 RPE 1 53 MINS Engine #246 Attrezzatura Power #245 RPE 8 53 MINS Power #245 Attrezzatura Complete #246 RPE 8 52 MINS Complete #246 Attrezzatura Complete #245 RPE 1 50 MINS Complete #245 Attrezzatura Foundational #246 RPE 1 50 MINS Foundational #246 Attrezzatura +2 Settimana 121 12/10-18/10 2026 Foundationa
+Testo visibile: IT Giuliano Appicciutoli IMPARA Come condurre gli allenamenti Come usare l'Hub ALLENATI Il mio allenamento Libreria Sfide Workout Builder Schermi Test di fitness CRESCI Materiali per l'evento Attivazioni dell'evento Promuovi il tuo spazio Assistenza Home Allenamenti Allenamenti Settimana 123 26/10-01/11 2026 Power #248 RPE 7 47 MINS Power #248 Attrezzatura +1 Power #247 RPE 1 53 MINS Power #247 Attrezzatura +1 Foundational #247 RPE 9 50 MINS Foundational #247 Attrezzatura +2 Engine #248 RPE 7 53 MINS Engine #248 Attrezzatura Engine #247 RPE 7 48 MINS Engine #247 Attrezzatura Complete #247 RPE 8 49 MINS Complete #247 Attrezzatura +2 Foundational #248 RPE 7 50 MINS Foundational #248 Attrezzatura Complete #248 RPE 8 73 MINS Complete #248 Attrezzatura +3 Settimana 122 19/10-25/10 2026 Foundati
