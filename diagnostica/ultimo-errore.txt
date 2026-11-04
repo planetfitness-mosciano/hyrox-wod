@@ -1,7 +1,7 @@
 Scritto dal workflow "Fetch WOD". Non si corregge a mano: lo riscrive il
 prossimo giro fallito, e un giro riuscito lo cancella.
 
-Quando:      2026-11-04T09:12:25.354Z (2026-11-04 in Italia, ore 10)
+Quando:      2026-11-04T10:51:20.895Z (2026-11-04 in Italia, ore 11)
 Errore:      Token non catturato entro 20s: nessuna richiesta GraphQL autenticata su /workouts. Richieste con token: (nessuna)
 Sugli schermi c'è il WOD del: 2026-10-05
 Avviso:      sì, si apre una segnalazione su GitHub
@@ -11,4 +11,4 @@ tardi la notte prossima. Se la segnalazione è ancora aperta domani, va letto
 il registro del giro in Actions.
 
 URL finale: https://performancehub.hyrox365.com/workouts
-Testo visibile: EN Giuliano Appicciutoli LEARN How to deliver Training How to use the Hub TRAIN My Training Library Challenges Workout Builder Screens Fitness Testing GROW Event Materials Event Activations Market your Space Support Home Workouts Workouts Week 124 02/11-08/11 2026 Complete #250 RPE 8 74 MINS Complete #250 Equipment +3 Engine #250 RPE 8 51 MINS Engine #250 Equipment Power #249 RPE 9 43 MINS Power #249 Equipment +1 Engine #249 RPE 7 51 MINS Engine #249 Equipment Complete #249 RPE 8 50 MINS Complete #249 Equipment +3 Foundational #250 RPE 9 50 MINS Foundational #250 Equipment +3 Power #250 RPE 8 50 MINS Power #250 Equipment Foundational #249 RPE 8 50 MINS Foundational #249 Equipment +1 Week 123 26/10-01/11 2026 Power #248 RPE 7 47 MINS Power #248 Equipment +1 Power #247 RPE 1 53 MINS Power #2
+Testo visibile: EN Giuliano Appicciutoli LEARN How to deliver Training How to use the Hub How to deliver HYROX R.A.M.P. TRAIN My Training Library Challenges Workout Builder Screens Fitness Testing GROW Event Materials Event Activations Market your Space Support Home Workouts Workouts Week 124 02/11-08/11 2026 Complete #250 RPE 8 74 MINS Complete #250 Equipment +3 Engine #250 RPE 8 51 MINS Engine #250 Equipment Power #249 RPE 9 43 MINS Power #249 Equipment +1 Engine #249 RPE 7 51 MINS Engine #249 Equipment Complete #249 RPE 8 50 MINS Complete #249 Equipment +3 Foundational #250 RPE 9 50 MINS Foundational #250 Equipment +3 Power #250 RPE 8 50 MINS Power #250 Equipment Foundational #249 RPE 8 50 MINS Foundational #249 Equipment +1 Week 123 26/10-01/11 2026 Power #248 RPE 7 47 MINS Power #248 Equipment +1 Pow
