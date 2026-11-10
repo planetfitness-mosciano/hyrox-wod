@@ -17,7 +17,12 @@ on:
     - cron: '17 3 * * *'   # 05:17 · 04:17
     - cron: '47 4 * * *'   # 06:47 · 05:47
     - cron: '17 7 * * *'   # 09:17 · 08:17 — se il WOD manca ancora, parte l'avviso
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      prova_email:
+        description: "Solo una prova dell'email di avviso: niente login, il WOD non si tocca"
+        type: boolean
+        default: false
 
 # Due partenze che GitHub fa arrivare insieme non devono fare due login: la
 # seconda aspetta che la prima finisca. Per questo il checkout prende main com'è
@@ -64,6 +69,7 @@ jobs:
       # fetch-wod.js lascia le righe esito= e avviso= per i passi qui sotto.
       - name: Fetch WOD and generate index.html + timer.html
         id: wod
+        if: ${{ !inputs.prova_email }}
         env:
           HYROX_EMAIL:    ${{ secrets.HYROX_EMAIL }}
           HYROX_PASSWORD: ${{ secrets.HYROX_PASSWORD }}
@@ -139,6 +145,84 @@ jobs:
           } > "$RUNNER_TEMP/avviso.md"
           gh issue create --label wod-fermo --body-file "$RUNNER_TEMP/avviso.md" \
             --title "Schermi HYROX: il WOD di oggi non è arrivato"
+
+      # La segnalazione qui sopra GitHub la manda all'email dell'account
+      # planetfitness-mosciano, che non legge nessuno: la #3 è rimasta aperta dal
+      # 06/10 all'11/11/2026 con gli schermi fermi. Dall'11/11 l'avviso arriva
+      # anche per email a Giuliano (scelta sua), UNA al giorno finché il WOD non
+      # torna: dopo le 7 i giri falliti possono essere sei in un giorno, e
+      # ognuno rifarebbe l'avviso. Il giorno dell'ultima email si segna con un
+      # commento sulla segnalazione aperta. Indirizzo e password stanno nei
+      # segreti, perché il repo è pubblico. Se l'email non parte il giro resta
+      # verde (decisione del 15/09), la segnalazione c'è comunque e il giro dopo
+      # riprova. Posta di servizio di planet.fit: si entra come avvisi@, si
+      # manda come info@ (così SiteGround firma DKIM per planet.fit).
+      - name: Avviso per email
+        if: always() && (steps.wod.outputs.avviso == 'si' || inputs.prova_email)
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PROVA: ${{ inputs.prova_email && 'si' || 'no' }}
+          SMTP_PASSWORD: ${{ secrets.AVVISO_SMTP_PASSWORD }}
+          EMAIL_A: ${{ secrets.AVVISO_EMAIL_A }}
+        run: |
+          if [ -z "$SMTP_PASSWORD" ] || [ -z "$EMAIL_A" ]; then
+            echo "::warning::Email non mandata: mancano i segreti AVVISO_SMTP_PASSWORD o AVVISO_EMAIL_A."
+            exit 0
+          fi
+          sito="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"
+          oggi=$(TZ=Europe/Rome date +%F)
+          segno="Email di avviso mandata il ${oggi}."
+          n=""
+          if [ "$PROVA" = "si" ]; then
+            oggetto="PROVA - Schermi HYROX: il WOD di oggi non è arrivato"
+          else
+            oggetto="Schermi HYROX: il WOD di oggi non è arrivato"
+            # Se GitHub non risponde, l'email parte lo stesso: meglio una di troppo.
+            n=$(gh api "repos/${GITHUB_REPOSITORY}/issues?state=open&labels=wod-fermo&per_page=100" --jq '.[0].number // empty' || true)
+            if [ -n "$n" ]; then
+              commenti=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${n}/comments?per_page=100" --jq '.[].body' || true)
+              if printf '%s\n' "$commenti" | grep -qxF "$segno"; then
+                echo "Oggi l'email è già partita: non se ne manda un'altra."
+                exit 0
+              fi
+            fi
+          fi
+          {
+            echo "From: Schermi HYROX <info@planet.fit>"
+            echo "To: ${EMAIL_A}"
+            echo "Subject: =?UTF-8?B?$(printf '%s' "$oggetto" | base64 -w0)?="
+            echo "Date: $(date -R)"
+            echo "Message-ID: <fetch-wod-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}@planet.fit>"
+            echo "MIME-Version: 1.0"
+            echo "Content-Type: text/plain; charset=UTF-8"
+            echo "Content-Transfer-Encoding: 8bit"
+            echo
+            if [ "$PROVA" = "si" ]; then
+              echo "Questa è una prova: gli schermi stanno bene. Se il WOD manca, l'email vera è come questa."
+              echo
+            fi
+            echo "Gli schermi HYROX di Mosciano non hanno il WOD di oggi."
+            echo
+            if [ -n "$n" ]; then echo "- Segnalazione: ${sito}/issues/${n}"; fi
+            echo "- Diagnosi: ${sito}/blob/main/diagnostica/ultimo-errore.txt"
+            echo "- Password del bot: ${sito}/settings/secrets/actions"
+            echo "- Far ripartire il bot: ${sito}/actions/workflows/fetch-wod.yml, pulsante Run workflow"
+            echo
+            echo "Finché il WOD non torna arriva un'email al giorno."
+            if [ "$PROVA" != "si" ] && [ -f diagnostica/ultimo-errore.txt ]; then
+              echo
+              echo "--- diagnostica/ultimo-errore.txt"
+              cat diagnostica/ultimo-errore.txt
+            fi
+          } > "$RUNNER_TEMP/email.txt"
+          curl -sS --crlf --ssl-reqd --url "smtp://mail.planet.fit:587" \
+            --user "avvisi@planet.fit:${SMTP_PASSWORD}" \
+            --mail-from info@planet.fit --mail-rcpt "$EMAIL_A" \
+            --upload-file "$RUNNER_TEMP/email.txt"
+          echo "Email di avviso mandata."
+          if [ -n "$n" ]; then gh issue comment "$n" --body "$segno"; fi
 
       - name: Chiudi l'avviso, il WOD è tornato
         if: steps.wod.outputs.esito == 'pubblicato'
