@@ -2,8 +2,9 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // fetch-wod.js — HYROX WOD daily automation
 // Runs via GitHub Actions at night: one login a day (orari in fetch-wod.yml)
-// 1. Puppeteer logs into portal.hyrox365.com and captures the Bearer token
-// 2. Queries the Hyrox GraphQL API for today's scheduled lesson
+// 1. Puppeteer logs into portal.hyrox365.com and keeps the hub page open
+// 2. Queries the Hyrox GraphQL API for today's scheduled lesson FROM that page,
+//    with the site's own session cookie (dal 24/10/2026 niente token Bearer)
 // 3. Generates index.html for the TV display
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -13,13 +14,12 @@ const path      = require('path');
 const crypto    = require('crypto');
 
 // L'indirizzo dei dati lo decide il sito di HYROX: il bot usa quello delle
-// richieste da cui prende il token (vedi raccoltaToken), e questo è solo il
-// ripiego. Fino al 15/09/2026 era api.prod.hyrox.fiit-tech.net/graphql. Il
-// Performance Hub ricompilato l'11/09 chiede i dati a OneFIIT
-// (REACT_APP_HYROX_API_URL nella sua configurazione pubblica), e il vecchio
+// richieste GraphQL che il sito fa da solo (vedi apriSessione), e questo è solo
+// il ripiego. Fino al 15/09/2026 era api.prod.hyrox.fiit-tech.net/graphql. Il
+// Performance Hub ricompilato l'11/09 chiede i dati a OneFIIT, e il vecchio
 // indirizzo, rimasto come copia, rispondeva 401 al token nuovo dopo ogni login.
+// Dall'11/11/2026 è VITE_GRAPHQL_API_URL in performancehub.hyrox365.com/config.js.
 const GRAPHQL   = 'https://onefiit-api.platform.onefiit.com/graphql';
-let graphqlUrl  = GRAPHQL; // lo aggiorna captureTokenOnce
 const PORTAL    = 'https://portal.hyrox365.com/login';
 const HUB       = 'https://performancehub.hyrox365.com';
 const EMAIL     = process.env.HYROX_EMAIL;
@@ -1825,34 +1825,57 @@ async function translateToItalian(text) {
 
 // ─── GraphQL helpers ──────────────────────────────────────────────────────────
 
-async function gql(token, query, variables = {}) {
-  const r = await fetch(graphqlUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      // Lo manda anche il sito: il «giorno» delle lezioni può deciderlo il server.
-      'x-timezone': 'Europe/Rome',
-    },
-    body: JSON.stringify({ query, variables })
+// La domanda parte DENTRO la pagina dell'hub già entrata (page.evaluate), e il
+// browser ci mette da solo il cookie della sessione, come fa il sito. Dal
+// 24/10/2026 il sito non manda più «Authorization: Bearer»: chiede i dati con
+// credentials: "include", e l'accesso sta in un cookie di onefiit-api preso al
+// login su /auth/token (bootstrap-app-<impronta>.js, letto l'11/11/2026). Fino ad
+// allora il bot copiava il token dalle intestazioni e chiedeva i dati da Node:
+// dal 24/10 non trovava più niente, e gli schermi sono rimasti al WOD del 05/10.
+// Gira nel browser: niente variabili di fuori, solo i parametri. Le intestazioni
+// sono quelle che manda il sito.
+async function richiestaGraphql(url, corpo, bearer) {
+  const intestazioni = {
+    'content-type': 'application/json',
+    'accept': 'application/graphql-response+json,application/json;q=0.9',
+    // Lo manda anche il sito: il «giorno» delle lezioni può deciderlo il server.
+    'x-timezone': 'Europe/Rome',
+  };
+  // Solo se il sito stesso ha mandato un token alle sue richieste GraphQL.
+  if (bearer) intestazioni['authorization'] = `Bearer ${bearer}`;
+  const r = await fetch(url, {
+    method: 'POST', credentials: 'include', headers: intestazioni, body: corpo,
+    signal: AbortSignal.timeout(30000),
   });
-  if (!r.ok) {
+  return { status: r.status, testo: await r.text() };
+}
+
+async function gql(sessione, query, variables = {}) {
+  const host = new URL(sessione.url).host;
+  let risposta;
+  try {
+    risposta = await sessione.chiedi(sessione.url, JSON.stringify({ query, variables }), sessione.bearer);
+  } catch (e) {
+    // Rete, CORS o pagina chiusa: può essere di passaggio, la partenza dopo riprova.
+    throw new Error(`GraphQL non raggiungibile da dentro la pagina di HYROX (${host}): ${e.message}`);
+  }
+  const { status, testo } = risposta;
+  if (status < 200 || status > 299) {
     // Il corpo della risposta dice il perché, e finisce nella diagnosi che sta
     // nel repo: si accorcia e si tolgono i token, se mai la risposta ne ripete uno.
-    let perche = '';
-    try {
-      perche = (await r.text()).replace(/eyJ[\w-]+\.[\w-]+\.[\w-]*/g, '[token]')
-        .replace(/\s+/g, ' ').trim().slice(0, 200);
-    } catch {}
-    const e = new Error(`GraphQL HTTP ${r.status} da ${new URL(graphqlUrl).host}`
-      + (perche ? ` — ${perche}` : ''));
-    // 4xx = la domanda o il token non vanno bene: rifatta fra un'ora, con un
+    const perche = String(testo || '').replace(/eyJ[\w-]+\.[\w-]+\.[\w-]*/g, '[token]')
+      .replace(/\s+/g, ' ').trim().slice(0, 200);
+    const e = new Error(`GraphQL HTTP ${status} da ${host}` + (perche ? ` — ${perche}` : ''));
+    // 4xx = la domanda o l'accesso non vanno bene: rifatta fra un'ora, con un
     // login in più sull'account dei coach, avrebbe la stessa risposta. Il 5xx
     // invece può essere un guasto di passaggio di HYROX.
-    e.definitivo = r.status < 500;
+    e.definitivo = status < 500;
     throw e;
   }
-  const json = await r.json();
+  let json;
+  try { json = JSON.parse(testo); } catch {
+    throw new Error(`GraphQL: risposta non leggibile da ${host} — ${String(testo || '').replace(/\s+/g, ' ').slice(0, 120)}`);
+  }
   if (json.errors) {
     const e = new Error(`GraphQL error: ${json.errors[0].message}`);
     e.definitivo = true;
@@ -1875,14 +1898,14 @@ async function gql(token, query, variables = {}) {
 // giorni di fila solo due volte (30/06-02/07 e 27-28/07).
 const GIORNI_RIPIEGO = 3;
 
-async function getTodayLessonId(token) {
+async function getTodayLessonId(sessione) {
   const isoDate = oggiInItalia();
   const da      = giorniPrima(isoDate, GIORNI_RIPIEGO);
 
   // Come il campo «wotd» della home del sito: la data è la mezzanotte UTC del
   // giorno. «recenti» è il calendario degli ultimi giorni, per il ripiego e per
   // la diagnosi; il sito lo chiede per la settimana con first: 14.
-  const data = await gql(token, `query WodDelGiorno($date: ISODateTime!, $dateRange: DateRange!) {
+  const data = await gql(sessione, `query WodDelGiorno($date: ISODateTime!, $dateRange: DateRange!) {
     oggi: allLessonSchedules(
       filters: { first: 1, orderBy: "created_at", direction: asc }
       condition: { scheduledAt: $date }
@@ -1948,20 +1971,20 @@ const VIDEO_FIELD = {
   equipmentQuery: 'equipment { name }', equipmentSubField: 'name',
 };
 
-async function getLessonDetails(token, lessonId) {
+async function getLessonDetails(sessione, lessonId) {
   try {
-    return await chiediLezione(token, lessonId, `${VIDEO_FIELD.query} ${VIDEO_FIELD.equipmentQuery}`);
+    return await chiediLezione(sessione, lessonId, `${VIDEO_FIELD.query} ${VIDEO_FIELD.equipmentQuery}`);
   } catch (e) {
     if (!/Cannot query field \\?"equipment\\?" on type \\?"Exercise/.test(e.message)) throw e;
     console.log('⚠️  Gli esercizi non hanno più il campo degli attrezzi: la lezione si chiede senza.');
-    return await chiediLezione(token, lessonId, VIDEO_FIELD.query);
+    return await chiediLezione(sessione, lessonId, VIDEO_FIELD.query);
   }
 }
 
 // Stessa forma della query WorkoutPage del sito: gli esercizi possono stare nei
 // gruppi, nei sottogruppi, o direttamente nella sezione (vedi sistemaEsercizi).
-async function chiediLezione(token, lessonId, campiEsercizio) {
-  const data = await gql(token, `query Lezione($id: LessonId!) {
+async function chiediLezione(sessione, lessonId, campiEsercizio) {
+  const data = await gql(sessione, `query Lezione($id: LessonId!) {
     lessonById(id: $id) {
       id name description duration rpe
       sections(orderBy: DISPLAY_ORDER) {
@@ -2035,7 +2058,7 @@ function sistemaEsercizi(lesson) {
   return quanti;
 }
 
-// ─── Puppeteer: login + token capture ────────────────────────────────────────
+// ─── Puppeteer: login e sessione ─────────────────────────────────────────────
 
 // Quello che il browser aveva davanti quando il login non è andato: finisce nel
 // log del run E in ultimaDiagnosiLogin, che poi viene scritta dentro il repo.
@@ -2071,35 +2094,55 @@ async function dumpLoginDebug(page, motivo) {
   console.log('--- fine DEBUG LOGIN ---');
 }
 
-// Il token si prende SOLO dalle richieste GraphQL che il sito fa da solo, e
-// insieme al token si tiene l'indirizzo a cui il sito le manda: poi il bot chiede
-// i dati allo stesso indirizzo con lo stesso token. Fino al 15/09/2026 si
-// prendeva il «Bearer» di qualsiasi richiesta e lo si mandava sempre a GRAPHQL,
-// e quando HYROX ha spostato i dati su OneFIIT ogni login riuscito finiva in un
-// 401. Degli altri token si tiene l'ultimo visto su HYROX, solo come ripiego, e
-// di tutte le richieste con token si annota l'indirizzo (mai il token).
-function raccoltaToken() {
-  const visti = new Set();
-  let graphql = null; // { token, url }
-  let altro   = null; // { token, url }
+// Le richieste GraphQL che il sito fa da solo dopo il login. Servono a due cose:
+// l'indirizzo a cui il sito chiede i dati (il bot chiede allo stesso), e la
+// prova che la sessione è in piedi, cioè una risposta buona del server. Fino al
+// 15/09/2026 si prendeva il «Bearer» di qualsiasi richiesta e lo si mandava
+// sempre a GRAPHQL; fino al 23/10/2026 si prendeva il «Bearer» delle richieste
+// GraphQL del sito. Dal 24/10 il sito non manda più token: l'accesso è un cookie,
+// e i dati si chiedono da dentro la pagina (vedi richiestaGraphql). Se il sito
+// tornasse a mandare un token lo si tiene, e la domanda del bot lo manda anche lui.
+// Nel log e nella diagnosi solo indirizzi e stati, mai token né cookie.
+function raccoltaGraphql() {
+  let url = null, bearer = null, buona = false;
+  const stati = [];
+  const eGraphql = (indirizzo, metodo) => {
+    try {
+      return metodo === 'POST' && new URL(indirizzo).pathname.endsWith('/graphql');
+    } catch { return false; }
+  };
   return {
-    leggi(url, auth) {
-      if (!auth || !auth.startsWith('Bearer ')) return;
-      let u;
-      try { u = new URL(url); } catch { return; }
-      const dove = u.origin + u.pathname;
-      visti.add(dove);
-      const preso = { token: auth.slice(7), url: dove };
-      if (u.pathname.endsWith('/graphql')) graphql = preso;
-      else if (/(^|\.)(onefiit\.com|fiit-tech\.net|hyrox365\.com)$/.test(u.hostname)) altro = preso;
+    richiesta(req) {
+      if (!eGraphql(req.url(), req.method())) return;
+      const u = new URL(req.url());
+      url = u.origin + u.pathname;
+      const auth = req.headers()['authorization'];
+      if (auth && auth.startsWith('Bearer ')) bearer = auth.slice(7);
     },
-    graphql: () => graphql,
-    altro:   () => altro,
-    visti:   () => [...visti],
+    risposta(res) {
+      if (!eGraphql(res.url(), res.request().method())) return;
+      stati.push(res.status());
+      if (res.ok()) buona = true;
+    },
+    url:    () => url,
+    bearer: () => bearer,
+    buona:  () => buona,
+    descrizione: () => (url || '(nessuna)')
+      + ` — risposte: ${stati.join(', ') || 'nessuna'}`
+      + (bearer ? ' — il sito manda anche un token' : ' — col cookie, senza token'),
   };
 }
 
-async function captureTokenOnce() {
+// Il login, e poi la pagina dell'hub RESTA APERTA: le domande del bot partono da
+// lì (sessione.chiedi), e chi chiama chiude il browser quando ha finito
+// (sessione.chiudi). Se il login non va, il browser si chiude qui.
+//
+// Un tentativo solo per partenza (decisione di Giuliano del 15/09/2026). Dal
+// 06/09 erano tre, con attese: con HYROX che rifiutava l'accesso facevano fino a
+// 21 login falliti al giorno, su un account che usano anche i coach di Mosciano.
+// Se questo tentativo non va riprova la partenza dopo, tranne quando HYROX ha
+// rifiutato l'accesso: allora si aspetta il giorno dopo (vedi in fondo al file).
+async function apriSessione() {
   console.log('Avvio Puppeteer...');
   const browser = await puppeteer.launch({
     headless: 'new',
@@ -2124,9 +2167,8 @@ async function captureTokenOnce() {
       'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
     );
 
-    // Il Bearer token si legge dalle intestazioni delle richieste che il portale
-    // fa da solo: per leggerle basta ASCOLTARE. page.on('request') arriva comunque,
-    // anche senza intercettazione.
+    // Le richieste GraphQL del sito si ASCOLTANO soltanto (vedi raccoltaGraphql):
+    // page.on('request') e page.on('response') arrivano anche senza intercettazione.
     //
     // L'intercettazione c'era e adesso non c'è più. È la causa più probabile dei
     // fallimenti a giri alterni da fine agosto: con setRequestInterception attiva
@@ -2136,8 +2178,9 @@ async function captureTokenOnce() {
     // di login. È esattamente quello che si vedeva: nessuna navigazione dopo il
     // submit, e la stessa identica foto (934.179 byte) nei tre run falliti del 4 e
     // 5 settembre.
-    const raccolta = raccoltaToken();
-    page.on('request', req => raccolta.leggi(req.url(), req.headers()['authorization']));
+    const raccolta = raccoltaGraphql();
+    page.on('request',  req => raccolta.richiesta(req));
+    page.on('response', res => raccolta.risposta(res));
 
     // IMPORTANTE: includi redirect_to già nel login iniziale.
     // Se navigassimo prima senza redirect_to e poi tornassimo con redirect_to
@@ -2184,51 +2227,41 @@ async function captureTokenOnce() {
     }
     console.log('Su performancehub:', page.url());
 
-    // Naviga a /workouts per triggerare le chiamate GraphQL autenticate
+    // Su /workouts il sito chiede da solo i dati della settimana: è la prova che
+    // la sessione è in piedi, e dice a quale indirizzo chiederli.
     console.log('Navigazione a /workouts...');
     await page.goto(HUB + '/workouts', { waitUntil: 'domcontentloaded', timeout: 30000 });
 
-    // Aspetta token (intercettato a livello di rete, max 20s)
+    // Aspetta che il sito abbia avuto una risposta buona dai dati (max 20s). Se
+    // non arriva si prova lo stesso: la prima domanda del bot dice il perché
+    // meglio di un'attesa scaduta.
     const deadline = Date.now() + 20000;
-    while (!raccolta.graphql() && Date.now() < deadline) {
+    while (!raccolta.buona() && Date.now() < deadline) {
       await new Promise(r => setTimeout(r, 200));
     }
 
-    const visti = raccolta.visti().join(', ') || '(nessuna)';
-    console.log('Richieste con token:', visti);
-    let preso = raccolta.graphql();
-    if (!preso && raccolta.altro()) {
-      // Nessuna richiesta GraphQL con token, ma HYROX un token l'ha dato: si
-      // prova quello con l'indirizzo di ripiego, invece di buttare il login.
-      console.log(`Nessuna richiesta GraphQL con token: provo quello di un'altra richiesta di HYROX con ${GRAPHQL}.`);
-      preso = { token: raccolta.altro().token, url: GRAPHQL };
+    const visto = raccolta.descrizione();
+    console.log('Richieste GraphQL del sito:', visto);
+    if (!raccolta.buona()) {
+      console.log('⚠️  Il sito non ha avuto una risposta buona dai dati entro 20s: provo lo stesso.');
     }
-    if (!preso) {
-      throw new Error('Token non catturato entro 20s: nessuna richiesta GraphQL autenticata su /workouts. '
-        + `Richieste con token: ${visti}`);
-    }
-
-    graphqlUrl = preso.url;
-    // Se dopo il login qualcosa va storto, la diagnosi nel repo dice da dove
-    // arrivava il token e a chi si chiedevano i dati (i token mai).
-    ultimaDiagnosiLogin = `Login riuscito. Dati chiesti a: ${graphqlUrl}\nRichieste con token: ${visti}`;
-    console.log(`Token catturato, dati da ${graphqlUrl}.`);
-    return preso.token;
+    const url = raccolta.url() || GRAPHQL;
+    // Se dopo il login qualcosa va storto, la diagnosi nel repo dice a chi si
+    // chiedevano i dati e come rispondeva il server al sito.
+    ultimaDiagnosiLogin = `Login riuscito. Dati chiesti a: ${url}, da dentro la pagina dell'hub\n`
+      + `Richieste GraphQL del sito: ${visto}`;
+    console.log(`Sessione aperta, dati da ${url}.`);
+    return {
+      url,
+      bearer: raccolta.bearer(),
+      chiedi: (indirizzo, corpo, bearer) => page.evaluate(richiestaGraphql, indirizzo, corpo, bearer),
+      chiudi: () => browser.close(),
+    };
   } catch (e) {
     if (page) await dumpLoginDebug(page, e.message);
+    await browser.close().catch(() => {});
     throw e;
-  } finally {
-    await browser.close();
   }
-}
-
-// Un tentativo solo per partenza (decisione di Giuliano del 15/09/2026). Dal
-// 06/09 erano tre, con attese: con HYROX che rifiutava l'accesso facevano fino a
-// 21 login falliti al giorno, su un account che usano anche i coach di Mosciano.
-// Se questo tentativo non va riprova la partenza dopo, tranne quando HYROX ha
-// rifiutato l'accesso: allora si aspetta il giorno dopo (vedi in fondo al file).
-async function captureToken() {
-  return captureTokenOnce();
 }
 
 const CAMPO_EMAIL    = 'input[placeholder="Email"]';
@@ -2416,17 +2449,22 @@ async function main() {
     return;
   }
 
-  // Step 1: Get Bearer token via Puppeteer login
-  const token = await captureToken();
+  // Step 1: login con Puppeteer; la pagina dell'hub resta aperta, perché i dati
+  // si chiedono da lì, col cookie del sito (vedi richiestaGraphql)
+  const sessione = await apriSessione();
 
   // Step 2: i campi di video e attrezzi sono fissi (vedi VIDEO_FIELD)
   const videoField = VIDEO_FIELD;
 
-  // Step 3: Find today's lesson
-  const { lessonId, isoDate } = await getTodayLessonId(token);
-
-  // Step 4: la lezione intera, con video e attrezzi degli esercizi
-  const lesson = await getLessonDetails(token, lessonId);
+  // Step 3 e 4: il WOD di oggi e la lezione intera, con video e attrezzi degli
+  // esercizi. Poi il browser si chiude, anche se una domanda va male.
+  let lessonId, isoDate, lesson;
+  try {
+    ({ lessonId, isoDate } = await getTodayLessonId(sessione));
+    lesson = await getLessonDetails(sessione, lessonId);
+  } finally {
+    await sessione.chiudi().catch(() => {});
+  }
   lesson.sections = lesson.sections || [];
 
   // PRIMA di ogni build: esercizi al loro posto, e niente pubblicazione se la
